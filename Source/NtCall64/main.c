@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016
+*  (C) COPYRIGHT AUTHORS, 2016 - 2017
 *
 *  TITLE:       MAIN.C
 *
-*  VERSION:     1.00
+*  VERSION:     1.10
 *
-*  DATE:        11 July 2016
+*  DATE:        18 July 2017
 *
 *  Program entry point.
 *

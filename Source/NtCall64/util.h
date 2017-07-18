@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016
+*  (C) COPYRIGHT AUTHORS, 2016 - 2017
 *
 *  TITLE:       UTIL.H
 *
-*  VERSION:     1.00
+*  VERSION:     1.10
 *
-*  DATE:        11 July 2016
+*  DATE:        18 July 2017
 *
 * THIS CODE AND INFORMATION IS PROVIDED "AS IS" WITHOUT WARRANTY OF
 * ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED
@@ -26,21 +26,17 @@ void force_priv();
 void log_call(
     ULONG ServiceNumber,
     ULONG ParametersInStack,
-    ULONG_PTR *Parameters
-);
+    ULONG_PTR *Parameters);
 
 BOOL GetWin32kBuildVersion(
     LPWSTR szImagePath,
-    ULONG *BuildNumber
-);
+    ULONG *BuildNumber);
 
 BOOL ReadBlacklistCfg(
     BADCALLS *Cfg,
     LPSTR CfgFileName,
-    LPSTR CfgSection
-);
+    LPSTR CfgSection);
 
 BOOL SyscallBlacklisted(
     LPSTR Syscall,
-    BADCALLS *Cfg
-);
+    BADCALLS *Cfg);

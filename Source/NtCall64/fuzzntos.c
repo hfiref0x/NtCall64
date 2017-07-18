@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016
+*  (C) COPYRIGHT AUTHORS, 2016 - 2017
 *
 *  TITLE:       FUZZNTOS.C
 *
-*  VERSION:     1.00
+*  VERSION:     1.10
 *
-*  DATE:        11 July 2016
+*  DATE:        18 July 2017
 *
 *  Service table fuzzing routines.
 *
@@ -36,22 +36,49 @@ BADCALLS            g_NtOsSyscallBlacklist;
 *
 */
 BOOL find_kiservicetable(
-    ULONG_PTR			MappedImageBase,
-    PRAW_SERVICE_TABLE	ServiceTable
+    ULONG_PTR           MappedImageBase,
+    PRAW_SERVICE_TABLE  ServiceTable
 )
 {
-    PIMAGE_NT_HEADERS	nthdr = RtlImageNtHeader((PVOID)MappedImageBase);
-    ULONG				c, p, SizeLimit =
-        nthdr->OptionalHeader.SizeOfImage - sizeof(KiSystemServiceStartPattern);
+    ULONG_PTR             SectionPtr = 0;
+    IMAGE_NT_HEADERS     *NtHeaders = RtlImageNtHeader((PVOID)MappedImageBase);
+    IMAGE_SECTION_HEADER *SectionTableEntry;
+    ULONG                 c, p, SectionSize = 0, SectionVA = 0;
+
+    SectionTableEntry = (PIMAGE_SECTION_HEADER)((PCHAR)NtHeaders +
+        sizeof(ULONG) +
+        sizeof(IMAGE_FILE_HEADER) +
+        NtHeaders->FileHeader.SizeOfOptionalHeader);
+
+    c = NtHeaders->FileHeader.NumberOfSections;
+    while (c > 0) {
+        if (*(PULONG)SectionTableEntry->Name == 'EGAP')
+            if ((SectionTableEntry->Name[4] == 'L') &&
+                (SectionTableEntry->Name[5] == 'K') &&
+                (SectionTableEntry->Name[6] == 0))
+
+            {
+                SectionVA = SectionTableEntry->VirtualAddress;
+                SectionPtr = ((ULONG_PTR)MappedImageBase + SectionVA);
+                SectionSize = SectionTableEntry->Misc.VirtualSize;
+                break;
+            }
+        c -= 1;
+        SectionTableEntry += 1;
+    }
+
+    if ((SectionPtr == 0) || (SectionSize == 0) || (SectionVA == 0)) {
+        return FALSE;
+    }
 
     p = 0;
-    for (c = 0; c < SizeLimit; c++)
+    for (c = 0; c < (SectionSize - sizeof(KiSystemServiceStartPattern)); c++)
         if (RtlCompareMemory(
-            (PVOID)(MappedImageBase + c),
+            (PVOID)(SectionPtr + c),
             KiSystemServiceStartPattern,
             sizeof(KiSystemServiceStartPattern)) == sizeof(KiSystemServiceStartPattern))
         {
-            p = c;
+            p = SectionVA + c;
             break;
         }
 
@@ -139,7 +166,7 @@ DWORD WINAPI fuzzntos_proc(
         return 0;
 
     for (c = 0; c < g_Sdt.CountOfEntries; c++) {
-        Name1 = PELoaderGetProcNameBySDTIndex(NtdllImage, c);
+        Name1 = (PCHAR)PELoaderGetProcNameBySDTIndex(NtdllImage, c);
 
         _strcpy_a(textbuf, "tid #");
         ultostr_a((ULONG)(ULONG_PTR)Parameter, _strend_a(textbuf));
@@ -153,7 +180,7 @@ DWORD WINAPI fuzzntos_proc(
         if (Name1 != NULL) {
             _strcat_a(textbuf, Name1);
         }
-        else {          
+        else {
             _strcat_a(textbuf, "#noname#");
         }
 
@@ -170,6 +197,7 @@ DWORD WINAPI fuzzntos_proc(
         for (r = 0; r < 64 * 1024; r++)
             gofuzz(c, g_Sdt.StackArgumentTable[c]);
     }
+
     return 0;
 }
 

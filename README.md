@@ -6,7 +6,7 @@ This program based on NtCall by Peter Kosyh. It isn't advanced version and its p
 
 #### System Requirements
 
-+ x64 Windows 7/8/8.1/10(TH1/TH2/RS1);
++ x64 Windows 7/8/8.1/10(TH1/TH2/RS1/RS2/RS3);
 + Account with administrative privileges (optional).
 
 #### Usage
@@ -71,6 +71,6 @@ In order to build from source you need Microsoft Visual Studio 2015 and later ve
 
 #### Authors
 
-(c) 2016 NTCALL64 Project
+(c) 2016 - 2017 NTCALL64 Project
 
 Original NtCall by Peter Kosyh aka Gloomy (c) 2001, http://gl00my.chat.ru/ 
