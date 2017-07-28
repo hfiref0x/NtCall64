@@ -72,6 +72,9 @@
     <ClCompile Include="minirtl\cmdline.c">
       <Filter>Source Files\minirtl</Filter>
     </ClCompile>
+    <ClCompile Include="minirtl\strtoul.c">
+      <Filter>Source Files\minirtl</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="minirtl\minirtl.h">

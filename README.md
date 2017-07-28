@@ -10,14 +10,23 @@ This program based on NtCall by Peter Kosyh. It isn't advanced version and its p
 + Account with administrative privileges (optional).
 
 #### Usage
-NTCALL64 [-win32k]
-* -win32k - launch W32pServiceTable services fuzzing (sometimes referenced as Shadow SSDT).
+NTCALL64 -help
+NTCALL64 [-log]
+NTCALL64 -win32k [-log]
+NTCALL64 -call id [-log]
+* -help   - show program parameters help;
+* -log    - enable logging to file last call parameters;
+* -win32k - launch W32pServiceTable services fuzzing (sometimes referenced as Shadow SSDT);
+* -call   - fuzz syscall by supplied id (id can be from any table ntos/win32k).
 
 When used without parameters NtCall64 will start fuzzing services in KiServiceTable (sometimes referenced as SSDT).
 
 Example: 
-+ ntcall64.exe  
++ ntcall64.exe -log
 + ntcall64.exe -win32k
++ ntcall64.exe -win32k -log
++ ntcall64 call 4097
++ ntcall64 call 15 -log
 
 Note: make sure to configure Windows crash dump settings before trying this tool 
 

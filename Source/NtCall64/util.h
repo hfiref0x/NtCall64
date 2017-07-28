@@ -4,9 +4,9 @@
 *
 *  TITLE:       UTIL.H
 *
-*  VERSION:     1.10
+*  VERSION:     1.20
 *
-*  DATE:        18 July 2017
+*  DATE:        28 July 2017
 *
 * THIS CODE AND INFORMATION IS PROVIDED "AS IS" WITHOUT WARRANTY OF
 * ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED
@@ -28,9 +28,12 @@ void log_call(
     ULONG ParametersInStack,
     ULONG_PTR *Parameters);
 
-BOOL GetWin32kBuildVersion(
-    LPWSTR szImagePath,
-    ULONG *BuildNumber);
+BOOL GetImageVersionInfo(
+    _In_ LPWSTR lpFileName,
+    _Out_opt_ ULONG *MajorVersion,
+    _Out_opt_ ULONG *MinorVersion,
+    _Out_opt_ ULONG *Build,
+    _Out_opt_ ULONG *Revision);
 
 BOOL ReadBlacklistCfg(
     BADCALLS *Cfg,
@@ -40,3 +43,6 @@ BOOL ReadBlacklistCfg(
 BOOL SyscallBlacklisted(
     LPSTR Syscall,
     BADCALLS *Cfg);
+
+VOID OutputConsoleMessage(
+    _In_ LPCSTR lpMessage);

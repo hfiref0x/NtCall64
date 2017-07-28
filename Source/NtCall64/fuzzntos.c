@@ -4,9 +4,9 @@
 *
 *  TITLE:       FUZZNTOS.C
 *
-*  VERSION:     1.10
+*  VERSION:     1.20
 *
-*  DATE:        18 July 2017
+*  DATE:        28 July 2017
 *
 *  Service table fuzzing routines.
 *
@@ -186,7 +186,7 @@ DWORD WINAPI fuzzntos_proc(
 
         bSkip = SyscallBlacklisted(Name1, &g_NtOsSyscallBlacklist);
         if (bSkip) {
-            _strcat_a(textbuf, " - skip, blacklist");
+            _strcat_a(textbuf, " ******* found in blacklist, skip");
         }
         _strcat_a(textbuf, "\r\n");
         WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), textbuf, (DWORD)_strlen_a(textbuf), &r, NULL);
@@ -211,20 +211,22 @@ DWORD WINAPI fuzzntos_proc(
 */
 void fuzz_ntos()
 {
+    BOOL        bCond = FALSE;
     WCHAR       szBuffer[MAX_PATH * 2];
     ULONG_PTR   KernelImage = 0;
     ULONG       c, r;
 
-    RtlSecureZeroMemory(szBuffer, sizeof(szBuffer));
-    if (GetSystemDirectory(szBuffer, MAX_PATH)) {
+    do {
+        RtlSecureZeroMemory(szBuffer, sizeof(szBuffer));
+        if (!GetSystemDirectory(szBuffer, MAX_PATH))
+            break;
         _strcat(szBuffer, TEXT("\\ntoskrnl.exe"));
         KernelImage = (ULONG_PTR)LoadLibraryEx(szBuffer, NULL, 0);
-    }
+        if (KernelImage == 0)
+            break;
 
-    RtlSecureZeroMemory(&g_NtOsSyscallBlacklist, sizeof(g_NtOsSyscallBlacklist));
-    ReadBlacklistCfg(&g_NtOsSyscallBlacklist, CFG_FILE, "ntos");
-
-    while (KernelImage != 0) {
+        RtlSecureZeroMemory(&g_NtOsSyscallBlacklist, sizeof(g_NtOsSyscallBlacklist));
+        ReadBlacklistCfg(&g_NtOsSyscallBlacklist, CFG_FILE, "ntos");
 
         if (!find_kiservicetable(KernelImage, &g_Sdt))
             break;
@@ -242,6 +244,9 @@ void fuzz_ntos()
         for (c = 0; c < MAX_FUZZTHREADS; c++) {
             CloseHandle(g_FuzzingThreads[c]);
         }
-        break;
-    }
+
+    } while (bCond);
+
+    if (KernelImage != 0) FreeLibrary((HMODULE)KernelImage);
+    OutputConsoleMessage("Ntoskrnl services fuzzing complete.\r\n");
 }

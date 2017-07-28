@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016
+*  (C) COPYRIGHT AUTHORS, 2016 - 2017
 *
 *  TITLE:       FUZZWIN32K.C
 *
-*  VERSION:     1.00
+*  VERSION:     1.20
 *
-*  DATE:        11 July 2016
+*  DATE:        28 July 2017
 *
 *  Shadow table fuzzing routines.
 *
@@ -104,7 +104,10 @@ BOOL lookup_win32k_names(
     PCHAR     pfn;
     IMAGE_IMPORT_BY_NAME *ImportEntry;
 
-    GetWin32kBuildVersion(ModuleName, &BuildNumber);
+    if (!GetImageVersionInfo(ModuleName, NULL, NULL, &BuildNumber, NULL)) {
+        OutputConsoleMessage("\r\nFailed to query win32k.sys version information.\r\n");
+        return FALSE;
+    }
 
     switch (BuildNumber) {
 
@@ -170,34 +173,34 @@ BOOL lookup_win32k_names(
 */
 void fuzz_win32k()
 {
-    BOOL        bSkip = FALSE;
+    BOOL        bSkip = FALSE, bCond = FALSE;
     ULONG       r, c;
+    HMODULE     hUser32 = 0;
     ULONG_PTR   KernelImage = 0;
     HANDLE      hCallThread = NULL;
     CALL_PARAM  CallParam;
     CHAR       *Name;
     CHAR        textbuf[1024];
 
-    HWND        hWnd;
-
     RAW_SERVICE_TABLE	ServiceTable;
     WCHAR               szBuffer[MAX_PATH * 2];
 
-    RtlSecureZeroMemory(szBuffer, sizeof(szBuffer));
-    if (GetSystemDirectory(szBuffer, MAX_PATH)) {
+    do {
+        hUser32 = LoadLibrary(TEXT("user32.dll"));
+        if (hUser32 == 0)
+            break;
+
+        RtlSecureZeroMemory(szBuffer, sizeof(szBuffer));
+        if (!GetSystemDirectory(szBuffer, MAX_PATH))
+            break;
+
         _strcat(szBuffer, TEXT("\\win32k.sys"));
-    }
+        KernelImage = (ULONG_PTR)LoadLibraryEx(szBuffer, NULL, 0);
+        if (KernelImage == 0)
+            break;
 
-    hWnd = FindWindowW(L"Shell_TrayWnd", L"");
-    if (hWnd != NULL) {
-        SendMessage(hWnd, WM_PAINT, 0, 0);
-    }
-
-    RtlSecureZeroMemory(&g_Win32kSyscallBlacklist, sizeof(g_Win32kSyscallBlacklist));
-    ReadBlacklistCfg(&g_Win32kSyscallBlacklist, CFG_FILE, "win32k");
-
-    KernelImage = (ULONG_PTR)LoadLibraryEx(szBuffer, NULL, 0);
-    while (KernelImage != 0) {
+        RtlSecureZeroMemory(&g_Win32kSyscallBlacklist, sizeof(g_Win32kSyscallBlacklist));
+        ReadBlacklistCfg(&g_Win32kSyscallBlacklist, CFG_FILE, "win32k");
 
         if (!find_w32pservicetable((HMODULE)KernelImage, &ServiceTable))
             break;
@@ -225,11 +228,11 @@ void fuzz_win32k()
 
             bSkip = SyscallBlacklisted(Name, &g_Win32kSyscallBlacklist);
             if (bSkip) {
-                _strcat_a(textbuf, " - skip, blacklist");
+                _strcat_a(textbuf, " ******* found in blacklist, skip");
             }
 
             _strcat_a(textbuf, "\r\n");
-            WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), textbuf, (DWORD)_strlen_a(textbuf), &r, NULL);
+            OutputConsoleMessage(textbuf);
 
             if (bSkip)
                 continue;
@@ -242,12 +245,17 @@ void fuzz_win32k()
                     _strcpy_a(textbuf, "Timeout reached for callproc of Service: ");
                     ultostr_a(CallParam.Syscall, _strend_a(textbuf));
                     _strcat_a(textbuf, "\r\n");
-                    WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), textbuf, (DWORD)_strlen_a(textbuf), &r, NULL);
+                    OutputConsoleMessage(textbuf);
                     TerminateThread(hCallThread, (DWORD)-1);
                 }
                 CloseHandle(hCallThread);
             }
         }
-        break;
-    }
+
+    } while (bCond);
+
+    if (KernelImage != 0) FreeLibrary((HMODULE)KernelImage);
+    if (hUser32 != 0) FreeLibrary(hUser32);
+
+    OutputConsoleMessage("Win32k services fuzzing complete.\r\n");
 }

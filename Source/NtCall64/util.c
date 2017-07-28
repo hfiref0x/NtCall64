@@ -4,9 +4,9 @@
 *
 *  TITLE:       UTIL.C
 *
-*  VERSION:     1.10
+*  VERSION:     1.20
 *
-*  DATE:        18 July 2017
+*  DATE:        28 July 2017
 *
 *  Program support routines.
 *
@@ -97,55 +97,48 @@ void log_call(
 }
 
 /*
-* GetWin32kBuildVersion
+* GetImageVersionInfo
 *
 * Purpose:
 *
-* Return build number of Win32k.
+* Return version numbers from version info.
 *
 */
-BOOL GetWin32kBuildVersion(
-    LPWSTR szImagePath,
-    ULONG *BuildNumber
+BOOL GetImageVersionInfo(
+    _In_ LPWSTR lpFileName,
+    _Out_opt_ ULONG *MajorVersion,
+    _Out_opt_ ULONG *MinorVersion,
+    _Out_opt_ ULONG *Build,
+    _Out_opt_ ULONG *Revision
 )
 {
-    BOOL bCond = FALSE, bResult = FALSE;
+    BOOL bResult = FALSE;
     DWORD dwHandle, dwSize;
     PVOID vinfo = NULL;
     UINT Length;
     VS_FIXEDFILEINFO *pFileInfo;
 
-    do {
-
-        if (BuildNumber == NULL)
-            break;
-
-        dwHandle = 0;
-        dwSize = GetFileVersionInfoSizeW(szImagePath, &dwHandle);
-        if (dwSize == 0) {
-            break;
-        }
-
+    dwHandle = 0;
+    dwSize = GetFileVersionInfoSize(lpFileName, &dwHandle);
+    if (dwSize) {
         vinfo = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, dwSize);
-        if (vinfo == NULL) {
-            break;
+        if (vinfo) {
+            if (GetFileVersionInfo(lpFileName, 0, dwSize, vinfo)) {
+                bResult = VerQueryValue(vinfo, TEXT("\\"), (LPVOID *)&pFileInfo, (PUINT)&Length);
+                if (bResult) {
+                    if (MajorVersion)
+                        *MajorVersion = HIWORD(pFileInfo->dwFileVersionMS);
+                    if (MinorVersion)
+                        *MinorVersion = LOWORD(pFileInfo->dwFileVersionMS);
+                    if (Build)
+                        *Build = HIWORD(pFileInfo->dwFileVersionLS);
+                    if (Revision)
+                        *Revision = LOWORD(pFileInfo->dwFileVersionLS);
+                }
+            }
+            HeapFree(GetProcessHeap(), 0, vinfo);
         }
-
-        if (!GetFileVersionInfo(szImagePath, 0, dwSize, vinfo)) {
-            break;
-        }
-
-        bResult = VerQueryValueW(vinfo, L"\\", (LPVOID *)&pFileInfo, (PUINT)&Length);
-        if (bResult) {
-            *BuildNumber = HIWORD(pFileInfo->dwFileVersionLS);
-        }
-
-    } while (bCond);
-
-    if (vinfo) {
-        HeapFree(GetProcessHeap(), 0, vinfo);
     }
-
     return bResult;
 }
 
@@ -246,4 +239,24 @@ BOOL SyscallBlacklisted(
             return TRUE;
     }
     return FALSE;
+}
+
+/*
+* OutputConsoleMessage
+*
+* Purpose:
+*
+* Output text to screen.
+*
+*/
+VOID OutputConsoleMessage(
+    _In_ LPCSTR lpMessage)
+{
+    ULONG r;
+
+    WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), 
+        lpMessage, 
+        (DWORD)_strlen_a(lpMessage), 
+        &r, 
+        NULL);
 }
