@@ -25,8 +25,8 @@ Example:
 + ntcall64.exe -log
 + ntcall64.exe -win32k
 + ntcall64.exe -win32k -log
-+ ntcall64 call 4097
-+ ntcall64 call 15 -log
++ ntcall64 -call 4097
++ ntcall64 -call 15 -log
 
 Note: make sure to configure Windows crash dump settings before trying this tool 
 
