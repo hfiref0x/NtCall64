@@ -252,6 +252,7 @@
   <ItemGroup>
     <ClCompile Include="fuzzntos.c" />
     <ClCompile Include="fuzzwin32k.c" />
+    <ClCompile Include="hde\hde64.c" />
     <ClCompile Include="main.c" />
     <ClCompile Include="minirtl\cmdline.c" />
     <ClCompile Include="minirtl\strtoul.c" />
@@ -274,6 +275,9 @@
     <ClInclude Include="fuzz.h" />
     <ClInclude Include="fuzzntos.h" />
     <ClInclude Include="fuzzwin32k.h" />
+    <ClInclude Include="hde\hde64.h" />
+    <ClInclude Include="hde\pstdint.h" />
+    <ClInclude Include="hde\table64.h" />
     <ClInclude Include="main.h" />
     <ClInclude Include="minirtl\cmdline.h" />
     <ClInclude Include="minirtl\minirtl.h" />

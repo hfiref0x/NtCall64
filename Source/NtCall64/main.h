@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016 - 2017
+*  (C) COPYRIGHT AUTHORS, 2016 - 2018
 *
 *  TITLE:       MAIN.H
 *
-*  VERSION:     1.10
+*  VERSION:     1.21
 *
-*  DATE:        18 July 2017
+*  DATE:        04 July 2018
 *
 *  Global definitions.
 *
@@ -47,6 +47,7 @@
 #include "minirtl\_filename.h"
 #include "minirtl\cmdline.h"
 #include "ntos.h"
+#include "hde\hde64.h"
 #include "util.h"
 #include "fuzz.h"
 

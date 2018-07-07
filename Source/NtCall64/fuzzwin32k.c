@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016 - 2017
+*  (C) COPYRIGHT AUTHORS, 2016 - 2018
 *
 *  TITLE:       FUZZWIN32K.C
 *
-*  VERSION:     1.20
+*  VERSION:     1.21
 *
-*  DATE:        28 July 2017
+*  DATE:        04 July 2018
 *
 *  Shadow table fuzzing routines.
 *
@@ -73,7 +73,7 @@ DWORD WINAPI win32k_callproc(
     ULONG  r;
     CALL_PARAM *CallParam = (PCALL_PARAM)Parameter;
 
-    for (r = 0; r < 256 * 1024; r++) {
+    for (r = 0; r < 64 * 1024; r++) {
         gofuzz(CallParam->Syscall, CallParam->ParametersInStack);
     }
 
@@ -103,6 +103,8 @@ BOOL lookup_win32k_names(
     CHAR    **Names = NULL;
     PCHAR     pfn;
     IMAGE_IMPORT_BY_NAME *ImportEntry;
+
+    hde64s hs;
 
     if (!GetImageVersionInfo(ModuleName, NULL, NULL, &BuildNumber, NULL)) {
         OutputConsoleMessage("\r\nFailed to query win32k.sys version information.\r\n");
@@ -150,7 +152,14 @@ BOOL lookup_win32k_names(
             else {
                 pfn = (PCHAR)(pW32pServiceTable[i] - NtHeaders->OptionalHeader.ImageBase + MappedImageBase);
             }
-            Address = MappedImageBase + *(ULONG_PTR*)(pfn + 6 + *(DWORD*)(pfn + 2));
+
+            hde64_disasm((void*)pfn, &hs);
+            if (hs.flags & F_ERROR) {
+                OutputConsoleMessage("\r\nlookup_win32k_names hde error.\r\n");
+                break;
+            }
+
+            Address = MappedImageBase + *(ULONG_PTR*)(pfn + hs.len + *(DWORD*)(pfn + (hs.len - 4)));
             if (Address) {
                 ImportEntry = (IMAGE_IMPORT_BY_NAME *)Address;
                 g_lpWin32pServiceTableNames[i] = ImportEntry->Name;
@@ -241,7 +250,7 @@ void fuzz_win32k()
             CallParam.Syscall = c + W32SYSCALLSTART;
             hCallThread = CreateThread(NULL, 0, win32k_callproc, (LPVOID)&CallParam, 0, &r);
             if (hCallThread) {
-                if (WaitForSingleObject(hCallThread, 10 * 1000) == WAIT_TIMEOUT) {
+                if (WaitForSingleObject(hCallThread, 20 * 1000) == WAIT_TIMEOUT) {
                     _strcpy_a(textbuf, "Timeout reached for callproc of Service: ");
                     ultostr_a(CallParam.Syscall, _strend_a(textbuf));
                     _strcat_a(textbuf, "\r\n");

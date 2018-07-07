@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016 - 2017
+*  (C) COPYRIGHT AUTHORS, 2016 - 2018
 *
 *  TITLE:       FUZZNTOS.C
 *
-*  VERSION:     1.20
+*  VERSION:     1.21
 *
-*  DATE:        28 July 2017
+*  DATE:        04 July 2018
 *
 *  Service table fuzzing routines.
 *
@@ -161,6 +161,8 @@ DWORD WINAPI fuzzntos_proc(
     CHAR   textbuf[512];
     ULONG_PTR NtdllImage;
 
+    ULONG ThreadID = (ULONG)(ULONG_PTR)Parameter;
+
     NtdllImage = (ULONG_PTR)GetModuleHandle(TEXT("ntdll.dll"));
     if (NtdllImage == 0)
         return 0;
@@ -169,7 +171,7 @@ DWORD WINAPI fuzzntos_proc(
         Name1 = (PCHAR)PELoaderGetProcNameBySDTIndex(NtdllImage, c);
 
         _strcpy_a(textbuf, "tid #");
-        ultostr_a((ULONG)(ULONG_PTR)Parameter, _strend_a(textbuf));
+        ultostr_a(ThreadID, _strend_a(textbuf));
 
         _strcat_a(textbuf, "\targs(stack): ");
         ultostr_a(g_Sdt.StackArgumentTable[c] / 4, _strend_a(textbuf));
