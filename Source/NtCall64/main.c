@@ -4,9 +4,9 @@
 *
 *  TITLE:       MAIN.C
 *
-*  VERSION:     1.21
+*  VERSION:     1.22
 *
-*  DATE:        04 July 2018
+*  DATE:        11 Nov 2018
 *
 *  Program entry point.
 *

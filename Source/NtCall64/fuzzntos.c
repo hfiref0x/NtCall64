@@ -4,9 +4,9 @@
 *
 *  TITLE:       FUZZNTOS.C
 *
-*  VERSION:     1.21
+*  VERSION:     1.22
 *
-*  DATE:        04 July 2018
+*  DATE:        11 Nov 2018
 *
 *  Service table fuzzing routines.
 *
@@ -160,8 +160,8 @@ DWORD WINAPI fuzzntos_proc(
     PCHAR  Name1;
     CHAR   textbuf[512];
     ULONG_PTR NtdllImage;
-
-    ULONG ThreadID = (ULONG)(ULONG_PTR)Parameter;
+    
+    ULONG ThreadID = PtrToUlong(Parameter);
 
     NtdllImage = (ULONG_PTR)GetModuleHandle(TEXT("ntdll.dll"));
     if (NtdllImage == 0)

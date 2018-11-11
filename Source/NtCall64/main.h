@@ -4,9 +4,9 @@
 *
 *  TITLE:       MAIN.H
 *
-*  VERSION:     1.21
+*  VERSION:     1.22
 *
-*  DATE:        04 July 2018
+*  DATE:        11 Nov 2018
 *
 *  Global definitions.
 *
@@ -22,12 +22,22 @@
 #error ANSI build is not supported
 #endif
 
-#if (_MSC_VER >= 1900) 
+#if defined (_MSC_VER)
+#if ((_MSC_VER >= 1910) && (_MSC_VER <= 1915)) //Visual Studio 2017
+#ifdef _DEBUG
+#pragma comment(lib, "vcruntimed.lib")
+#pragma comment(lib, "ucrtd.lib")
+#else
+#pragma comment(lib, "libucrt.lib")
+#pragma comment(lib, "libvcruntime.lib")
+#endif
+#elif (_MSC_VER == 1900) //Visual Studio 2015
 #ifdef _DEBUG
 #pragma comment(lib, "vcruntimed.lib")
 #pragma comment(lib, "ucrtd.lib")
 #else
 #pragma comment(lib, "libvcruntime.lib")
+#endif
 #endif
 #endif
 
