@@ -6,7 +6,7 @@
 *
 *  VERSION:     1.22
 *
-*  DATE:        11 Nov 2018
+*  DATE:        16 Nov 2018
 *
 *  Global definitions.
 *
@@ -23,7 +23,7 @@
 #endif
 
 #if defined (_MSC_VER)
-#if ((_MSC_VER >= 1910) && (_MSC_VER <= 1915)) //Visual Studio 2017
+#if (_MSC_VER >= 1910) //Visual Studio 2017
 #ifdef _DEBUG
 #pragma comment(lib, "vcruntimed.lib")
 #pragma comment(lib, "ucrtd.lib")
