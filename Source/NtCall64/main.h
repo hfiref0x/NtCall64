@@ -4,9 +4,9 @@
 *
 *  TITLE:       MAIN.H
 *
-*  VERSION:     1.22
+*  VERSION:     1.25
 *
-*  DATE:        16 Nov 2018
+*  DATE:        04 Dec 2018
 *
 *  Global definitions.
 *
@@ -23,7 +23,7 @@
 #endif
 
 #if defined (_MSC_VER)
-#if (_MSC_VER >= 1910) //Visual Studio 2017
+#if (_MSC_VER >= 1910)
 #ifdef _DEBUG
 #pragma comment(lib, "vcruntimed.lib")
 #pragma comment(lib, "ucrtd.lib")
@@ -31,25 +31,14 @@
 #pragma comment(lib, "libucrt.lib")
 #pragma comment(lib, "libvcruntime.lib")
 #endif
-#elif (_MSC_VER == 1900) //Visual Studio 2015
-#ifdef _DEBUG
-#pragma comment(lib, "vcruntimed.lib")
-#pragma comment(lib, "ucrtd.lib")
-#else
-#pragma comment(lib, "libvcruntime.lib")
-#endif
 #endif
 #endif
 
-#pragma warning(disable: 28278) // Function name appears with no prototype in scope
 #pragma warning(disable: 4005)  // macro redefinition
-#pragma warning(disable: 4054)  // from function pointer to data pointer
-#pragma warning(disable: 4055)  // from data pointer to function pointer
 #pragma warning(disable: 4091)  // 'typedef ': ignored on left of '' when no variable is declared
-#pragma warning(disable: 4152)  // nonstandard extension, function/data pointer conversion in expression
 #pragma warning(disable: 4201)  // nonstandard extension used : nameless struct/union
-#pragma warning(disable: 6102)  // Using %s from failed function call at line %u
 #pragma warning(disable: 6320)  // exception-filter expression is the constant EXCEPTION_EXECUTE_HANDLER
+#pragma warning(disable: 28278) // Function name appears with no prototype in scope
 
 #include <windows.h>
 #include <ntstatus.h>
@@ -60,8 +49,6 @@
 #include "hde\hde64.h"
 #include "util.h"
 #include "fuzz.h"
-
-#define CFG_FILE       "badcalls.ini"
 
 void gofuzz(
     ULONG ServiceIndex, 

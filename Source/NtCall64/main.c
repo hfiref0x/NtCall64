@@ -4,9 +4,9 @@
 *
 *  TITLE:       MAIN.C
 *
-*  VERSION:     1.22
+*  VERSION:     1.25
 *
-*  DATE:        11 Nov 2018
+*  DATE:        04 Dec 2018
 *
 *  Program entry point.
 *
@@ -42,7 +42,13 @@ NTCALL64 -call id [-log] \n\n\r\
 
 BOOL g_Log = FALSE;
 
+#ifdef __cplusplus 
+extern "C" {
+#endif
 NTSTATUS ntSyscallGate(ULONG ServiceId, ULONG ArgumentCount, ULONG_PTR *Arguments);
+#ifdef __cplusplus
+}
+#endif
 
 /*
 * gofuzz
@@ -88,7 +94,7 @@ LONG CALLBACK VehHandler(
 {
     PVOID pExitThread;
 
-    pExitThread = GetProcAddress(GetModuleHandle(TEXT("kernel32.dll")), "ExitThread");
+    pExitThread = (PVOID)GetProcAddress(GetModuleHandle(TEXT("kernel32.dll")), "ExitThread");
     ExceptionInfo->ContextRecord->Rip = (DWORD64)pExitThread;
 
     return EXCEPTION_CONTINUE_EXECUTION;
@@ -186,7 +192,7 @@ VOID fuzz_syscall(
             break;
         }
 
-        force_priv();
+        ForcePrivilegeEnabled();
 
         CallParam.ParametersInStack = ServiceTable.StackArgumentTable[i];
         CallParam.Syscall = SyscallNumber;

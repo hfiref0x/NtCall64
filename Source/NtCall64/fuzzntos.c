@@ -4,9 +4,9 @@
 *
 *  TITLE:       FUZZNTOS.C
 *
-*  VERSION:     1.22
+*  VERSION:     1.25
 *
-*  DATE:        11 Nov 2018
+*  DATE:        04 Dec 2018
 *
 *  Service table fuzzing routines.
 *
@@ -25,7 +25,7 @@ const BYTE  KiSystemServiceStartPattern[] = { 0x45, 0x33, 0xC9, 0x44, 0x8B, 0x05
 
 RAW_SERVICE_TABLE	g_Sdt;
 HANDLE              g_FuzzingThreads[MAX_FUZZTHREADS];
-BADCALLS            g_NtOsSyscallBlacklist;
+BLACKLIST           g_NtOsBlackList;
 
 /*
 * find_kiservicetable
@@ -181,20 +181,24 @@ DWORD WINAPI fuzzntos_proc(
         _strcat_a(textbuf, "\tname:");
         if (Name1 != NULL) {
             _strcat_a(textbuf, Name1);
+
+            bSkip = BlackListEntryPresent(&g_NtOsBlackList, (LPCSTR)Name1);
+            if (bSkip) {
+                _strcat_a(textbuf, " ******* found in blacklist, skip");
+            }
+
         }
         else {
             _strcat_a(textbuf, "#noname#");
-        }
+        }       
 
-        bSkip = SyscallBlacklisted(Name1, &g_NtOsSyscallBlacklist);
-        if (bSkip) {
-            _strcat_a(textbuf, " ******* found in blacklist, skip");
-        }
         _strcat_a(textbuf, "\r\n");
         WriteFile(GetStdHandle(STD_OUTPUT_HANDLE), textbuf, (DWORD)_strlen_a(textbuf), &r, NULL);
 
-        if (bSkip)
+        if (bSkip) {
+            bSkip = FALSE;
             continue;
+        }
 
         for (r = 0; r < 64 * 1024; r++)
             gofuzz(c, g_Sdt.StackArgumentTable[c]);
@@ -227,15 +231,15 @@ void fuzz_ntos()
         if (KernelImage == 0)
             break;
 
-        RtlSecureZeroMemory(&g_NtOsSyscallBlacklist, sizeof(g_NtOsSyscallBlacklist));
-        ReadBlacklistCfg(&g_NtOsSyscallBlacklist, CFG_FILE, "ntos");
+        RtlSecureZeroMemory(&g_NtOsBlackList, sizeof(g_NtOsBlackList));
+        BlackListCreateFromFile(&g_NtOsBlackList, CFG_FILE, (LPCSTR)"ntos");
 
         if (!find_kiservicetable(KernelImage, &g_Sdt))
             break;
 
         RtlSecureZeroMemory(g_FuzzingThreads, sizeof(g_FuzzingThreads));
 
-        force_priv();
+        ForcePrivilegeEnabled();
 
         for (c = 0; c < MAX_FUZZTHREADS; c++) {
             g_FuzzingThreads[c] = CreateThread(NULL, 0, fuzzntos_proc, (LPVOID)(ULONG_PTR)c, 0, &r);
@@ -244,7 +248,9 @@ void fuzz_ntos()
         WaitForMultipleObjects(MAX_FUZZTHREADS, g_FuzzingThreads, TRUE, INFINITE);
 
         for (c = 0; c < MAX_FUZZTHREADS; c++) {
-            CloseHandle(g_FuzzingThreads[c]);
+            if (g_FuzzingThreads[c]) {
+                CloseHandle(g_FuzzingThreads[c]);
+            }
         }
 
     } while (bCond);
