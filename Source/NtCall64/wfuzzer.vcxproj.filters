@@ -57,13 +57,7 @@
     <ClCompile Include="minirtl\u64tostr.c">
       <Filter>Source Files\minirtl</Filter>
     </ClCompile>
-    <ClCompile Include="fuzzntos.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
     <ClCompile Include="util.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="fuzzwin32k.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="minirtl\ultohex.c">
@@ -81,6 +75,12 @@
     <ClCompile Include="hde\hde64.c">
       <Filter>hde</Filter>
     </ClCompile>
+    <ClCompile Include="fuzz.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="minirtl\strtou64.c">
+      <Filter>Source Files\minirtl</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="minirtl\minirtl.h">
@@ -95,13 +95,7 @@
     <ClInclude Include="fuzz.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="fuzzntos.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="util.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="fuzzwin32k.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="tables.h">

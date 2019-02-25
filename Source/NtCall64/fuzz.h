@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016 - 2017
+*  (C) COPYRIGHT AUTHORS, 2016 - 2019
 *
 *  TITLE:       FUZZ.H
 *
-*  VERSION:     1.20
+*  VERSION:     1.30
 *
-*  DATE:        28 July 2017
+*  DATE:        22 Feb 2019
 *
 * THIS CODE AND INFORMATION IS PROVIDED "AS IS" WITHOUT WARRANTY OF
 * ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED
@@ -16,9 +16,14 @@
 *******************************************************************************/
 #pragma once
 
+#include "main.h"
+
 #define W32SYSCALLSTART     0x1000
-#define MAX_PARAMETERS		17
+#define MAX_PARAMETERS		32
 #define SIZEOF_FUZZDATA		13
+
+#define FUZZ_THREAD_TIMEOUT (30) * (1000)
+#define FUZZ_PASS_COUNT     (64) * (1024)
 
 static const ULONG_PTR fuzzdata[SIZEOF_FUZZDATA] = {
     0x0000000000000000, 0x000000000000ffff, 0x000000000000fffe, 0x00007ffffffeffff,
@@ -27,13 +32,9 @@ static const ULONG_PTR fuzzdata[SIZEOF_FUZZDATA] = {
     0xffff800000000001
 };
 
-typedef struct _RAW_SERVICE_TABLE {
-    ULONG	 CountOfEntries;
-    LPVOID	*ServiceTable;
-    PBYTE	 StackArgumentTable;
-} RAW_SERVICE_TABLE, *PRAW_SERVICE_TABLE;
+VOID FuzzRun(
+    _In_ NTCALL_CONTEXT *Context);
 
-typedef struct _CALL_PARAM {
-    ULONG Syscall;
-    ULONG ParametersInStack;
-} CALL_PARAM, *PCALL_PARAM;
+BOOL FuzzLookupWin32kNames(
+    _In_ LPWSTR ModuleName,
+    _Inout_ NTCALL_CONTEXT *Context);

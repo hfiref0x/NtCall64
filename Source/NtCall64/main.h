@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016 - 2018
+*  (C) COPYRIGHT AUTHORS, 2016 - 2019
 *
 *  TITLE:       MAIN.H
 *
-*  VERSION:     1.25
+*  VERSION:     1.30
 *
-*  DATE:        04 Dec 2018
+*  DATE:        22 Feb 2019
 *
 *  Global definitions.
 *
@@ -23,7 +23,7 @@
 #endif
 
 #if defined (_MSC_VER)
-#if (_MSC_VER >= 1910)
+#if (_MSC_VER >= 1900)
 #ifdef _DEBUG
 #pragma comment(lib, "vcruntimed.lib")
 #pragma comment(lib, "ucrtd.lib")
@@ -35,22 +35,47 @@
 #endif
 
 #pragma warning(disable: 4005)  // macro redefinition
-#pragma warning(disable: 4091)  // 'typedef ': ignored on left of '' when no variable is declared
-#pragma warning(disable: 4201)  // nonstandard extension used : nameless struct/union
-#pragma warning(disable: 6320)  // exception-filter expression is the constant EXCEPTION_EXECUTE_HANDLER
-#pragma warning(disable: 28278) // Function name appears with no prototype in scope
 
 #include <windows.h>
 #include <ntstatus.h>
+#include <intrin.h>
+#include "ntos.h"
+#include "hde\hde64.h"
 #include "minirtl\minirtl.h"
 #include "minirtl\_filename.h"
 #include "minirtl\cmdline.h"
-#include "ntos.h"
-#include "hde\hde64.h"
+
+typedef struct _RAW_SERVICE_TABLE {
+    ULONG   CountOfEntries;
+    LPVOID  *ServiceTable;
+    PBYTE   StackArgumentTable;
+} RAW_SERVICE_TABLE, *PRAW_SERVICE_TABLE;
+
+typedef struct _CALL_PARAM {
+    ULONG Syscall;
+    ULONG ParametersInStack;
+    ULONG ThreadTimeout;
+    ULONG64 NumberOfPassesForCall;
+} CALL_PARAM, *PCALL_PARAM;
+
 #include "util.h"
+
+typedef struct _NTCALL_CONTEXT {
+    BOOL LogEnabled;
+    BOOL ProbeWin32k;
+    BOOL ProbeSingleSyscall;
+    ULONG SingleSyscallId;
+    ULONG64 SyscallPassCount;
+    HANDLE LogHandle;
+    ULONG_PTR hNtdll;
+    ULONG_PTR SystemImageBase;
+    CHAR **Win32pServiceTableNames;
+    RAW_SERVICE_TABLE ServiceTable;
+    BLACKLIST BlackList;
+    WCHAR szSystemDirectory[MAX_PATH + 1];
+} NTCALL_CONTEXT, *PNTCALL_CONTEXT;
+
+extern NTCALL_CONTEXT g_ctx;
+
 #include "fuzz.h"
 
-void gofuzz(
-    ULONG ServiceIndex, 
-    ULONG ParametersInStack
-    );
