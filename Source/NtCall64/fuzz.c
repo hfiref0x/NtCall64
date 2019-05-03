@@ -4,9 +4,9 @@
 *
 *  TITLE:       FUZZ.C
 *
-*  VERSION:     1.30
+*  VERSION:     1.31
 *
-*  DATE:        22 Feb 2019
+*  DATE:        03 May 2019
 *
 *  Fuzzing routines.
 *
@@ -92,6 +92,9 @@ BOOL FuzzLookupWin32kNames(
     PCHAR     pfn;
     IMAGE_IMPORT_BY_NAME *ImportEntry;
 
+    ULONG_PTR IATEntry;
+    PCHAR ServiceName;
+
     hde64s hs;
 
     if (!GetImageVersionInfo(ModuleName, NULL, NULL, &BuildNumber, NULL)) {
@@ -153,29 +156,44 @@ BOOL FuzzLookupWin32kNames(
 
         for (i = 0; i < ServiceTable->CountOfEntries; i++) {
 
-            if (BuildNumber > 10586) {
-                Table = (DWORD *)pW32pServiceTable;
-                pfn = (PCHAR)(Table[i] + MappedImageBase);
+            __try {
+
+                if (BuildNumber > 10586) {
+                    Table = (DWORD *)pW32pServiceTable;
+                    pfn = (PCHAR)(Table[i] + MappedImageBase);
+                }
+                else {
+                    pfn = (PCHAR)(pW32pServiceTable[i] - NtHeaders->OptionalHeader.ImageBase + MappedImageBase);
+                }
+
+                hde64_disasm((void*)pfn, &hs);
+                if (hs.flags & F_ERROR) {
+
+                    FuzzShowMessage("[!]FuzzLookupWin32kNames HDE error.\r\n",
+                        FOREGROUND_RED | FOREGROUND_INTENSITY);
+
+                    break;
+                }
+
+                ServiceName = "UnknownName";
+                if (BuildNumber > 18885) {
+                    IATEntry = (ULONG_PTR)pfn + hs.len + *(DWORD*)(pfn + (hs.len - 4));
+                    ServiceName = (PCHAR)PELoaderIATEntryToImport((LPVOID)MappedImageBase, (LPVOID)IATEntry, NULL);
+                }
+                else {
+                    Address = MappedImageBase + *(ULONG_PTR*)(pfn + hs.len + *(DWORD*)(pfn + (hs.len - 4)));
+                    if (Address) {
+                        ImportEntry = (IMAGE_IMPORT_BY_NAME *)Address;
+                        ServiceName = ImportEntry->Name;
+                    }
+                }
+                Win32pServiceTableNames[i] = ServiceName;
+
             }
-            else {
-                pfn = (PCHAR)(pW32pServiceTable[i] - NtHeaders->OptionalHeader.ImageBase + MappedImageBase);
+            __except (EXCEPTION_EXECUTE_HANDLER) {
+                Win32pServiceTableNames[i] = "UnknownName!exception";
+
             }
-
-            hde64_disasm((void*)pfn, &hs);
-            if (hs.flags & F_ERROR) {
-
-                FuzzShowMessage("[!]FuzzLookupWin32kNames HDE error.\r\n",
-                    FOREGROUND_RED | FOREGROUND_INTENSITY);
-
-                break;
-            }
-
-            Address = MappedImageBase + *(ULONG_PTR*)(pfn + hs.len + *(DWORD*)(pfn + (hs.len - 4)));
-            if (Address) {
-                ImportEntry = (IMAGE_IMPORT_BY_NAME *)Address;
-                Win32pServiceTableNames[i] = ImportEntry->Name;
-            }
-
         }
     }
     return TRUE;

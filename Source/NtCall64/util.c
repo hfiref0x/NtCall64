@@ -4,9 +4,9 @@
 *
 *  TITLE:       UTIL.C
 *
-*  VERSION:     1.30
+*  VERSION:     1.31
 *
-*  DATE:        22 Feb 2019
+*  DATE:        03 May 2019
 *
 *  Program support routines.
 *
@@ -667,6 +667,64 @@ PCHAR PELoaderGetProcNameBySDTIndex(
         if (*((PULONG)pfn) == 0xb8d18b4c)
             if (*((PULONG)(pfn + 4)) == SDTIndex)
                 return (PCHAR)(MappedImageBase + NameTableBase[c]);
+    }
+
+    return NULL;
+}
+
+/*
+* PELoaderIATEntryToImport
+*
+* Purpose:
+*
+* Resolve function name.
+*
+*/
+_Success_(return != NULL)
+LPCSTR PELoaderIATEntryToImport(
+    _In_ LPVOID Module,
+    _In_ LPVOID IATEntry,
+    _Out_opt_ LPCSTR *ImportModuleName
+)
+{
+    PIMAGE_NT_HEADERS           NtHeaders;
+    PIMAGE_IMPORT_DESCRIPTOR    impd;
+    ULONG_PTR                   *rname, imprva;
+    LPVOID                      *raddr;
+
+    NtHeaders = RtlImageNtHeader(Module);
+    if (NtHeaders->OptionalHeader.NumberOfRvaAndSizes <= IMAGE_DIRECTORY_ENTRY_IMPORT)
+        return NULL;
+
+    imprva = NtHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress;
+    if (imprva == 0)
+        return NULL;
+
+    impd = (PIMAGE_IMPORT_DESCRIPTOR)((ULONG_PTR)Module + imprva);
+
+    while (impd->Name != 0) {
+        raddr = (LPVOID *)((ULONG_PTR)Module + impd->FirstThunk);
+        if (impd->OriginalFirstThunk == 0)
+            rname = (ULONG_PTR *)raddr;
+        else
+            rname = (ULONG_PTR *)((ULONG_PTR)Module + impd->OriginalFirstThunk);
+
+        while (*rname != 0) {
+            if (IATEntry == raddr)
+            {
+                if (((*rname) & IMAGE_ORDINAL_FLAG) == 0)
+                {
+                    if (ImportModuleName) {
+                        *ImportModuleName = (LPCSTR)((ULONG_PTR)Module + impd->Name);
+                    }
+                    return (LPCSTR)&((PIMAGE_IMPORT_BY_NAME)((ULONG_PTR)Module + *rname))->Name;
+                }
+            }
+
+            ++rname;
+            ++raddr;
+        }
+        ++impd;
     }
 
     return NULL;

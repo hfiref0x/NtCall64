@@ -4,9 +4,9 @@
 *
 *  TITLE:       UTIL.H
 *
-*  VERSION:     1.30
+*  VERSION:     1.31
 *
-*  DATE:        22 Feb 2019
+*  DATE:        03 May 2019
 *
 * THIS CODE AND INFORMATION IS PROVIDED "AS IS" WITHOUT WARRANTY OF
 * ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED
@@ -95,3 +95,9 @@ BOOL IsElevated(
 PCHAR PELoaderGetProcNameBySDTIndex(
     _In_ ULONG_PTR MappedImageBase,
     _In_ ULONG SDTIndex);
+
+_Success_(return != NULL)
+LPCSTR PELoaderIATEntryToImport(
+    _In_ LPVOID Module,
+    _In_ LPVOID IATEntry,
+    _Out_opt_ LPCSTR *ImportModuleName);
