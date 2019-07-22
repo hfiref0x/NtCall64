@@ -4,9 +4,9 @@
 *
 *  TITLE:       FUZZ.C
 *
-*  VERSION:     1.31
+*  VERSION:     1.32
 *
-*  DATE:        03 May 2019
+*  DATE:        20 July 2019
 *
 *  Fuzzing routines.
 *
@@ -87,12 +87,15 @@ BOOL FuzzLookupWin32kNames(
     CHAR                  **Win32pServiceTableNames;
 
     DWORD64  *pW32pServiceTable = NULL;
-    DWORD    *Table = NULL;
     CHAR    **Names = NULL;
     PCHAR     pfn;
+
     IMAGE_IMPORT_BY_NAME *ImportEntry;
 
-    ULONG_PTR IATEntry;
+    HMODULE win32u = NULL;
+    ULONG win32uLimit;
+    PWIN32_SHADOWTABLE ShadowTable = NULL;
+
     PCHAR ServiceName;
 
     hde64s hs;
@@ -142,7 +145,7 @@ BOOL FuzzLookupWin32kNames(
     //
     // Query service names.
     // If win32k version below 10240 copy them from predefined array.
-    // Otherwise lookup them dynamically from win32k import.
+    // Otherwise lookup them dynamically.
     //
     if (BuildNumber < 10240) {
         if (Names == NULL)
@@ -154,18 +157,34 @@ BOOL FuzzLookupWin32kNames(
     }
     else {
 
+        //
+        // 
+        //
+        if (BuildNumber >= 14393) {
+
+            win32u = LoadLibraryEx(TEXT("win32u.dll"), NULL, 0);
+            if (win32u == NULL) {
+                FuzzShowMessage("[!] Failed to load win32u.dll.\r\n",
+                    FOREGROUND_RED | FOREGROUND_INTENSITY);
+                return FALSE;
+            }
+
+            win32uLimit = FuzzEnumWin32uServices(GetProcessHeap(), (LPVOID)win32u, &ShadowTable);
+
+            if ((win32uLimit != ServiceTable->CountOfEntries) || (ShadowTable == NULL)) {
+                FuzzShowMessage("[!] Win32u services enumeration failed.\r\n",
+                    FOREGROUND_RED | FOREGROUND_INTENSITY);
+                return FALSE;
+            }
+
+        }
+
         for (i = 0; i < ServiceTable->CountOfEntries; i++) {
 
-            __try {
+            ServiceName = "UnknownName";
 
-                if (BuildNumber > 10586) {
-                    Table = (DWORD *)pW32pServiceTable;
-                    pfn = (PCHAR)(Table[i] + MappedImageBase);
-                }
-                else {
-                    pfn = (PCHAR)(pW32pServiceTable[i] - NtHeaders->OptionalHeader.ImageBase + MappedImageBase);
-                }
-
+            if (BuildNumber <= 10586) {
+                pfn = (PCHAR)(pW32pServiceTable[i] - NtHeaders->OptionalHeader.ImageBase + MappedImageBase);
                 hde64_disasm((void*)pfn, &hs);
                 if (hs.flags & F_ERROR) {
 
@@ -174,28 +193,24 @@ BOOL FuzzLookupWin32kNames(
 
                     break;
                 }
+                Address = MappedImageBase + *(ULONG_PTR*)(pfn + hs.len + *(DWORD*)(pfn + (hs.len - 4)));
+                if (Address) {
+                    ImportEntry = (IMAGE_IMPORT_BY_NAME *)Address;
+                    ServiceName = ImportEntry->Name;
+                }
+            }
+            else if (BuildNumber >= 14393) {
 
-                ServiceName = "UnknownName";
-                if (BuildNumber > 18885) {
-                    IATEntry = (ULONG_PTR)pfn + hs.len + *(DWORD*)(pfn + (hs.len - 4));
-                    ServiceName = (PCHAR)PELoaderIATEntryToImport((LPVOID)MappedImageBase, (LPVOID)IATEntry, NULL);
-                }
-                else {
-                    Address = MappedImageBase + *(ULONG_PTR*)(pfn + hs.len + *(DWORD*)(pfn + (hs.len - 4)));
-                    if (Address) {
-                        ImportEntry = (IMAGE_IMPORT_BY_NAME *)Address;
-                        ServiceName = ImportEntry->Name;
-                    }
-                }
-                Win32pServiceTableNames[i] = ServiceName;
+                ServiceName = FuzzResolveW32kServiceNameById(i + 0x1000, ShadowTable);
+                if (ServiceName == NULL) ServiceName = "UnknownName";
 
             }
-            __except (EXCEPTION_EXECUTE_HANDLER) {
-                Win32pServiceTableNames[i] = "UnknownName!exception";
-
-            }
+            Win32pServiceTableNames[i] = ServiceName;
         }
     }
+
+    if (win32u) FreeLibrary(win32u);
+
     return TRUE;
 }
 

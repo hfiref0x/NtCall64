@@ -4,9 +4,9 @@
 *
 *  TITLE:       UTIL.H
 *
-*  VERSION:     1.31
+*  VERSION:     1.32
 *
-*  DATE:        03 May 2019
+*  DATE:        20 July 2019
 *
 * THIS CODE AND INFORMATION IS PROVIDED "AS IS" WITHOUT WARRANTY OF
 * ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED
@@ -15,6 +15,12 @@
 *
 *******************************************************************************/
 #pragma once
+
+typedef struct _WIN32_SHADOWTABLE {
+    ULONG Index;
+    CHAR Name[256];
+    struct _WIN32_SHADOWTABLE *NextService;
+} WIN32_SHADOWTABLE, *PWIN32_SHADOWTABLE;
 
 typedef struct _BL_ENTRY {
     LIST_ENTRY ListEntry;
@@ -86,6 +92,16 @@ BOOL FuzzFind_W32pServiceTable(
     _In_ HMODULE MappedImageBase,
     _In_ PRAW_SERVICE_TABLE ServiceTable);
 
+_Success_(return != 0)
+ULONG FuzzEnumWin32uServices(
+    _In_ HANDLE HeapHandle,
+    _In_ LPVOID Module,
+    _Out_ PWIN32_SHADOWTABLE* Table);
+
+PCHAR FuzzResolveW32kServiceNameById(
+    _In_ ULONG ServiceId,
+    _In_ PWIN32_SHADOWTABLE ShadowTable);
+
 BOOLEAN IsLocalSystem();
 BOOLEAN IsUserInAdminGroup();
 
@@ -95,9 +111,3 @@ BOOL IsElevated(
 PCHAR PELoaderGetProcNameBySDTIndex(
     _In_ ULONG_PTR MappedImageBase,
     _In_ ULONG SDTIndex);
-
-_Success_(return != NULL)
-LPCSTR PELoaderIATEntryToImport(
-    _In_ LPVOID Module,
-    _In_ LPVOID IATEntry,
-    _Out_opt_ LPCSTR *ImportModuleName);

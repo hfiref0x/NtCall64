@@ -4,9 +4,9 @@
 *
 *  TITLE:       UTIL.C
 *
-*  VERSION:     1.31
+*  VERSION:     1.32
 *
-*  DATE:        03 May 2019
+*  DATE:        20 July 2019
 *
 *  Program support routines.
 *
@@ -159,7 +159,7 @@ BOOL BlackListCreateFromFile(
     _In_ LPCSTR ConfigSectionName
 )
 {
-    BOOL    bCond = FALSE, bResult = FALSE;
+    BOOL    bResult = FALSE;
     LPSTR   Section = NULL, SectionPtr;
     ULONG   nSize, SectionSize, BytesRead, Length;
     CHAR    ConfigFilePath[MAX_PATH + 16];
@@ -225,7 +225,7 @@ BOOL BlackListCreateFromFile(
 
         bResult = TRUE;
 
-    } while (bCond);
+    } while (FALSE);
 
 Cleanup:
 
@@ -673,58 +673,102 @@ PCHAR PELoaderGetProcNameBySDTIndex(
 }
 
 /*
-* PELoaderIATEntryToImport
+* FuzzEnumWin32uServices
 *
 * Purpose:
 *
-* Resolve function name.
+* Enumerate win32u module services to the table.
 *
 */
-_Success_(return != NULL)
-LPCSTR PELoaderIATEntryToImport(
+_Success_(return != 0)
+ULONG FuzzEnumWin32uServices(
+    _In_ HANDLE HeapHandle,
     _In_ LPVOID Module,
-    _In_ LPVOID IATEntry,
-    _Out_opt_ LPCSTR *ImportModuleName
+    _Out_ PWIN32_SHADOWTABLE* Table
 )
 {
     PIMAGE_NT_HEADERS           NtHeaders;
-    PIMAGE_IMPORT_DESCRIPTOR    impd;
-    ULONG_PTR                   *rname, imprva;
-    LPVOID                      *raddr;
+    PIMAGE_EXPORT_DIRECTORY		exp;
+    PDWORD						FnPtrTable, NameTable;
+    PWORD						NameOrdTable;
+    ULONG_PTR					fnptr, exprva, expsize;
+    ULONG						c, n, result;
+    PWIN32_SHADOWTABLE			NewEntry;
 
     NtHeaders = RtlImageNtHeader(Module);
-    if (NtHeaders->OptionalHeader.NumberOfRvaAndSizes <= IMAGE_DIRECTORY_ENTRY_IMPORT)
-        return NULL;
+    if (NtHeaders->OptionalHeader.NumberOfRvaAndSizes <= IMAGE_DIRECTORY_ENTRY_EXPORT)
+        return 0;
 
-    imprva = NtHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_IMPORT].VirtualAddress;
-    if (imprva == 0)
-        return NULL;
+    exprva = NtHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
+    if (exprva == 0)
+        return 0;
 
-    impd = (PIMAGE_IMPORT_DESCRIPTOR)((ULONG_PTR)Module + imprva);
+    expsize = NtHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].Size;
 
-    while (impd->Name != 0) {
-        raddr = (LPVOID *)((ULONG_PTR)Module + impd->FirstThunk);
-        if (impd->OriginalFirstThunk == 0)
-            rname = (ULONG_PTR *)raddr;
-        else
-            rname = (ULONG_PTR *)((ULONG_PTR)Module + impd->OriginalFirstThunk);
+    exp = (PIMAGE_EXPORT_DIRECTORY)((ULONG_PTR)Module + exprva);
+    FnPtrTable = (PDWORD)((ULONG_PTR)Module + exp->AddressOfFunctions);
+    NameTable = (PDWORD)((ULONG_PTR)Module + exp->AddressOfNames);
+    NameOrdTable = (PWORD)((ULONG_PTR)Module + exp->AddressOfNameOrdinals);
 
-        while (*rname != 0) {
-            if (IATEntry == raddr)
+    result = 0;
+
+    for (c = 0; c < exp->NumberOfFunctions; ++c)
+    {
+        fnptr = (ULONG_PTR)Module + FnPtrTable[c];
+        if (*(PDWORD)fnptr != 0xb8d18b4c) //mov r10, rcx; mov eax
+            continue;
+
+        NewEntry = (PWIN32_SHADOWTABLE)HeapAlloc(HeapHandle,
+            HEAP_ZERO_MEMORY, sizeof(WIN32_SHADOWTABLE));
+
+        if (NewEntry == NULL)
+            break;
+
+        NewEntry->Index = *(PDWORD)(fnptr + 4);
+
+        for (n = 0; n < exp->NumberOfNames; ++n)
+        {
+            if (NameOrdTable[n] == c)
             {
-                if (((*rname) & IMAGE_ORDINAL_FLAG) == 0)
-                {
-                    if (ImportModuleName) {
-                        *ImportModuleName = (LPCSTR)((ULONG_PTR)Module + impd->Name);
-                    }
-                    return (LPCSTR)&((PIMAGE_IMPORT_BY_NAME)((ULONG_PTR)Module + *rname))->Name;
-                }
-            }
+                _strncpy_a(&NewEntry->Name[0],
+                    sizeof(NewEntry->Name),
+                    (LPCSTR)((ULONG_PTR)Module + NameTable[n]),
+                    sizeof(NewEntry->Name));
 
-            ++rname;
-            ++raddr;
+                break;
+            }
         }
-        ++impd;
+
+        ++result;
+
+        *Table = NewEntry;
+        Table = &NewEntry->NextService;
+    }
+
+    return result;
+}
+
+/*
+* FuzzResolveW32kServiceNameById
+*
+* Purpose:
+*
+* Return service name if found by id in prebuilt lookup table.
+*
+*/
+PCHAR FuzzResolveW32kServiceNameById(
+    _In_ ULONG ServiceId,
+    _In_ PWIN32_SHADOWTABLE ShadowTable
+)
+{
+    PWIN32_SHADOWTABLE Entry = ShadowTable;
+
+    while (Entry) {
+
+        if (Entry->Index == ServiceId) {
+            return Entry->Name;
+        }
+        Entry = Entry->NextService;
     }
 
     return NULL;
