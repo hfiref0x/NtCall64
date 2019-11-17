@@ -85,7 +85,7 @@ This program may crash the operation system, affect it stability, which may resu
 
 # Bugs found with NtCall64
 
-* [win32k!NtGdiDdDDISetHwProtectionTeardownRecovery](http://www.kernelmode.info/forum/viewtopic.php?f=13&t=4410)
+* [win32k!NtGdiDdDDISetHwProtectionTeardownRecovery](https://gist.githubusercontent.com/hfiref0x/6901a8e571946e84d8adb1c6f720fdad/raw/63c27cc71828969f7802ad5f7677f2bafe6d84fb/gistfile1.txt)
 * [win32k!NtUserCreateActivationObject](https://gist.githubusercontent.com/hfiref0x/23a2331588e7765664f50cac26cf0637/raw/49457ef5e30049b6b4ca392e489aaceaafe2b280/NtUserCreateActivationObject.cpp)
 * [win32k!NtUserOpenDesktop](https://gist.githubusercontent.com/hfiref0x/6e726b352da7642fc5b84bf6ebce0007/raw/8df05220f194da4980f401e15a0efdb7694deb26/NtUserOpenDesktop.c)
 * [nt!NtLoadEnclaveData](https://gist.githubusercontent.com/hfiref0x/1ac328a8e73d053012e02955d38e36a8/raw/b26174f8b7b68506d62308ce4327dfc573b8aa26/main.c)
