@@ -4,9 +4,9 @@
 *
 *  TITLE:       MAIN.H
 *
-*  VERSION:     1.30
+*  VERSION:     1.33
 *
-*  DATE:        22 Feb 2019
+*  DATE:        22 Nov 2019
 *
 *  Global definitions.
 *
@@ -64,7 +64,11 @@ typedef struct _NTCALL_CONTEXT {
     BOOL LogEnabled;
     BOOL ProbeWin32k;
     BOOL ProbeSingleSyscall;
+    BOOL IsUserInAdminGroup;
+    BOOL IsLocalSystem;
+    BOOL IsElevated;
     ULONG SingleSyscallId;
+    ULONG ThreadWaitTimeout;
     ULONG64 SyscallPassCount;
     HANDLE LogHandle;
     ULONG_PTR hNtdll;

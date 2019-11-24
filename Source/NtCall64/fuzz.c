@@ -4,9 +4,9 @@
 *
 *  TITLE:       FUZZ.C
 *
-*  VERSION:     1.32
+*  VERSION:     1.33
 *
-*  DATE:        20 July 2019
+*  DATE:        22 Nov 2019
 *
 *  Fuzzing routines.
 *
@@ -442,7 +442,7 @@ VOID FuzzRun(
             //
             CallParams.Syscall = sid;
             CallParams.ParametersInStack = Context->ServiceTable.StackArgumentTable[c];
-            CallParams.ThreadTimeout = FUZZ_THREAD_TIMEOUT;
+            CallParams.ThreadTimeout = (Context->ThreadWaitTimeout * 1000);
             CallParams.NumberOfPassesForCall = Context->SyscallPassCount;
 
             if (Context->LogEnabled)

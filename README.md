@@ -10,13 +10,16 @@ This program based on NtCall by Peter Kosyh. It isn't advanced version and its p
 + Account with administrative privileges (optional).
 
 # Usage
-NTCALL64 -help[-win32k][-log][-call Id][-pc Value]
+NTCALL64 -help[-win32k][-log][-call Id][-pc Value][-wt Value][-s]
 
 * -help      - show program parameters help;
 * -log       - enable logging via COM1 port, service parameters will be logged (slow), default disabled;
 * -win32k    - launch W32pServiceTable services fuzzing (sometimes referenced as Shadow SSDT);
 * -call Id   - fuzz syscall by supplied id (id can be from any table ntos/win32k);
-* -pc Value  - set pass count for each syscall (maximum value is limited to ULONG64 max value), default value 65536.
+* -pc Value  - set pass count for each syscall (maximum value is limited to ULONG64 max value), default value 65536;
+* -wt Value  - set wait timeout for calling threads in seconds (except single syscall fuzzing), default value is 30;
+* -s         - Attempt to run program from LocalSystem account.
+
 
 When used without parameters NtCall64 will start fuzzing services in KiServiceTable (ntos, sometimes referenced as SSDT).
 
@@ -35,6 +38,8 @@ Example:
 + ntcall64 -call 4097 -log
 + ntcall64 -call 4097 -log -pc 1000
 + ntcall64 -pc 1000
++ ntcall64 -s
++ ntcall64 -pc 1000 -s
 
 Note: make sure to configure Windows crash dump settings before trying this tool 
 

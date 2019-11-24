@@ -4,9 +4,9 @@
 *
 *  TITLE:       UTIL.H
 *
-*  VERSION:     1.32
+*  VERSION:     1.33
 *
-*  DATE:        20 July 2019
+*  DATE:        22 Nov 2019
 *
 * THIS CODE AND INFORMATION IS PROVIDED "AS IS" WITHOUT WARRANTY OF
 * ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED
@@ -104,6 +104,7 @@ PCHAR FuzzResolveW32kServiceNameById(
 
 BOOLEAN IsLocalSystem();
 BOOLEAN IsUserInAdminGroup();
+VOID RunAsLocalSystem();
 
 BOOL IsElevated(
     _In_opt_ HANDLE ProcessHandle);
