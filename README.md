@@ -106,13 +106,15 @@ In order to build from source you need Microsoft Visual Studio 2015 and later ve
 * Select Platform ToolSet first for project in solution you want to build (Project->Properties->General): 
   * v120 for Visual Studio 2013;
   * v140 for Visual Studio 2015; 
-  * v141 for Visual Studio 2017.
+  * v141 for Visual Studio 2017;
+  * v142 for Visual Studio 2019.
 * For v140 and above set Target Platform Version (Project->Properties->General):
-  * If v140 then select 8.1 (Note that Windows 8.1 SDK must be installed);
-  * If v141 then select 10.0.17763.0 (Note that Windows 10.0.17763 SDK must be installed). 
+  * If v140 then select 8.1;
+  * If v141/v142 then select 10.
+* Minimum required Windows SDK version 8.1  
 
 # Authors
 
-(c) 2016 - 2019 NTCALL64 Project
+(c) 2016 - 2020 NTCALL64 Project
 
 Original NtCall by Peter Kosyh aka Gloomy (c) 2001, http://gl00my.chat.ru/ 

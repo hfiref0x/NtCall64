@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016 - 2019
+*  (C) COPYRIGHT AUTHORS, 2016 - 2020
 *
 *  TITLE:       UTIL.C
 *
-*  VERSION:     1.33
+*  VERSION:     1.34
 *
-*  DATE:        22 Nov 2019
+*  DATE:        24 Jan 2020
 *
 *  Program support routines.
 *
@@ -321,11 +321,12 @@ BOOL GetCommandLineOption(
 )
 {
     LPTSTR	cmdline = GetCommandLine();
-    TCHAR   Param[64];
+    TCHAR   Param[MAX_PATH + 1];
     ULONG   rlen;
     int		i = 0;
 
-    while (GetCommandLineParam(cmdline, i, Param, sizeof(Param), &rlen))
+    RtlSecureZeroMemory(Param, sizeof(Param));
+    while (GetCommandLineParam(cmdline, i, Param, MAX_PATH, &rlen))
     {
         if (rlen == 0)
             break;
