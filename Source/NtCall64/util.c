@@ -1,14 +1,14 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016 - 2020
+*  (C) COPYRIGHT AUTHORS, 2016 - 2021
 *
 *  TITLE:       UTIL.C
 *
-*  VERSION:     1.34
+*  VERSION:     1.35
 *
-*  DATE:        24 Jan 2020
+*  DATE:        21 Feb 2021
 *
-*  Program support routines.
+*  Support routines.
 *
 * THIS CODE AND INFORMATION IS PROVIDED "AS IS" WITHOUT WARRANTY OF
 * ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED
@@ -16,30 +16,8 @@
 * PARTICULAR PURPOSE.
 *
 *******************************************************************************/
-#include "main.h"
 
-#pragma comment(lib, "Version.lib")
-
-VOID FORCEINLINE InitializeListHead(
-    _In_ PLIST_ENTRY ListHead
-)
-{
-    ListHead->Flink = ListHead->Blink = ListHead;
-}
-
-VOID FORCEINLINE InsertTailList(
-    _Inout_ PLIST_ENTRY ListHead,
-    _Inout_ PLIST_ENTRY Entry
-)
-{
-    PLIST_ENTRY Blink;
-
-    Blink = ListHead->Blink;
-    Entry->Flink = ListHead;
-    Entry->Blink = Blink;
-    Blink->Flink = Entry;
-    ListHead->Blink = Entry;
-}
+#include "global.h"
 
 /*
 * GetImageVersionInfo
@@ -99,15 +77,45 @@ BOOL GetImageVersionInfo(
     return bResult;
 }
 
+VOID ConsoleInit(
+    VOID)
+{
+    COORD coordScreen = { 0, 0 };
+    DWORD cCharsWritten;
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    DWORD dwConSize;
+    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
+
+    if (!GetConsoleScreenBufferInfo(hConsole, &csbi))
+        return;
+
+    SetConsoleTextAttribute(hConsole, FOREGROUND_BLUE | FOREGROUND_GREEN | FOREGROUND_RED);
+
+    dwConSize = csbi.dwSize.X * csbi.dwSize.Y;
+
+    if (!FillConsoleOutputCharacter(hConsole, (TCHAR)' ',
+        dwConSize, coordScreen, &cCharsWritten))
+        return;
+
+    if (!GetConsoleScreenBufferInfo(hConsole, &csbi))
+        return;
+
+    if (!FillConsoleOutputAttribute(hConsole, csbi.wAttributes,
+        dwConSize, coordScreen, &cCharsWritten))
+        return;
+
+    SetConsoleCursorPosition(hConsole, coordScreen);
+}
+
 /*
-* FuzzShowMessage
+* ConsoleShowMessage
 *
 * Purpose:
 *
 * Output text to screen.
 *
 */
-VOID FuzzShowMessage(
+VOID ConsoleShowMessage(
     _In_ LPCSTR lpMessage,
     _In_opt_ WORD wColor
 )
@@ -144,167 +152,6 @@ VOID FuzzShowMessage(
     }
 }
 
-
-/*
-* BlackListCreateFromFile
-*
-* Purpose:
-*
-* Read blacklist from ini file to allocated memory.
-*
-*/
-BOOL BlackListCreateFromFile(
-    _In_ BLACKLIST *BlackList,
-    _In_ LPCSTR ConfigFileName,
-    _In_ LPCSTR ConfigSectionName
-)
-{
-    BOOL    bResult = FALSE;
-    LPSTR   Section = NULL, SectionPtr;
-    ULONG   nSize, SectionSize, BytesRead, Length;
-    CHAR    ConfigFilePath[MAX_PATH + 16];
-
-    HANDLE BlackListHeap;
-
-    PBL_ENTRY Entry = NULL;
-
-    do {
-
-        RtlSecureZeroMemory(ConfigFilePath, sizeof(ConfigFilePath));
-        GetModuleFileNameA(NULL, (LPSTR)&ConfigFilePath, MAX_PATH);
-        _filepath_a(ConfigFilePath, ConfigFilePath);
-        _strcat_a(ConfigFilePath, ConfigFileName);
-
-        BlackListHeap = HeapCreate(HEAP_GROWABLE, 0, 0);
-        if (BlackListHeap == NULL)
-            break;
-
-        HeapSetInformation(BlackListHeap, HeapEnableTerminationOnCorruption, NULL, 0);
-
-        nSize = 2 * (1024 * 1024);
-
-        Section = (LPSTR)HeapAlloc(BlackListHeap, HEAP_ZERO_MEMORY, nSize);
-        if (Section == NULL)
-            break;
-
-        SectionSize = GetPrivateProfileSectionA(ConfigSectionName, Section, nSize, ConfigFilePath);
-        if (SectionSize == 0)
-            break;
-
-        BytesRead = 0;
-        SectionPtr = Section;
-
-        RtlSecureZeroMemory(BlackList, sizeof(BLACKLIST));
-
-        InitializeListHead(&BlackList->ListHead);
-
-        do {
-
-            if (*SectionPtr == 0)
-                break;
-
-            Length = (ULONG)_strlen_a(SectionPtr) + 1;
-            BytesRead += Length;
-
-            Entry = (BL_ENTRY*)HeapAlloc(BlackListHeap, HEAP_ZERO_MEMORY, sizeof(BL_ENTRY));
-            if (Entry == NULL) {
-                goto Cleanup;
-            }
-
-            Entry->Hash = BlackListHashString(SectionPtr);
-
-            InsertTailList(&BlackList->ListHead, &Entry->ListEntry);
-
-            BlackList->NumberOfEntries += 1;
-
-            SectionPtr += Length;
-
-        } while (BytesRead < SectionSize);
-
-        BlackList->HeapHandle = BlackListHeap;
-
-        bResult = TRUE;
-
-    } while (FALSE);
-
-Cleanup:
-
-    if (bResult == FALSE) {
-        if (BlackListHeap) HeapDestroy(BlackListHeap);
-    }
-    return bResult;
-}
-
-/*
-* BlackListEntryPresent
-*
-* Purpose:
-*
-* Return TRUE if syscall is in blacklist.
-*
-*/
-BOOL BlackListEntryPresent(
-    _In_ BLACKLIST *BlackList,
-    _In_ LPCSTR SyscallName
-)
-{
-    DWORD Hash = BlackListHashString(SyscallName);
-
-    PLIST_ENTRY Head, Next;
-    BL_ENTRY *entry;
-
-    Head = &BlackList->ListHead;
-    Next = Head->Flink;
-    while ((Next != NULL) && (Next != Head)) {
-        entry = CONTAINING_RECORD(Next, BL_ENTRY, ListEntry);
-        if (entry->Hash == Hash)
-            return TRUE;
-
-        Next = Next->Flink;
-    }
-
-    return FALSE;
-}
-
-/*
-* BlackListHashString
-*
-* Purpose:
-*
-* Hash string.
-*
-*/
-DWORD BlackListHashString(
-    _In_ LPCSTR Name
-)
-{
-    DWORD Hash = 5381;
-    PCHAR p = (PCHAR)Name;
-
-    while (*p)
-        Hash = 33 * Hash ^ *p++;
-
-    return Hash;
-}
-
-/*
-* BlackListDestroy
-*
-* Purpose:
-*
-* Destroy blacklist heap and zero blacklist structure.
-*
-*/
-VOID BlackListDestroy(
-    _In_ BLACKLIST *BlackList
-)
-{
-    if (BlackList) {
-        if (BlackList->HeapHandle) HeapDestroy(BlackList->HeapHandle);
-        RtlSecureZeroMemory(BlackList, sizeof(BLACKLIST));
-    }
-}
-
 /*
 * GetCommandLineOption
 *
@@ -317,9 +164,11 @@ BOOL GetCommandLineOption(
     _In_ LPCTSTR OptionName,
     _In_ BOOL IsParametric,
     _Out_writes_opt_z_(ValueSize) LPTSTR OptionValue,
-    _In_ ULONG ValueSize
+    _In_ ULONG ValueSize,
+    _Out_opt_ PULONG ParamLength
 )
 {
+    BOOL    bResult;
     LPTSTR	cmdline = GetCommandLine();
     TCHAR   Param[MAX_PATH + 1];
     ULONG   rlen;
@@ -333,148 +182,21 @@ BOOL GetCommandLineOption(
 
         if (_strcmp(Param, OptionName) == 0)
         {
-            if (IsParametric)
-                return GetCommandLineParam(cmdline, i + 1, OptionValue, ValueSize, &rlen);
+            if (IsParametric) {
+                bResult = GetCommandLineParam(cmdline, i + 1, OptionValue, ValueSize, &rlen);
+                if (ParamLength)
+                    *ParamLength = rlen;
+                return bResult;
+            }
 
             return TRUE;
         }
         ++i;
     }
 
-    return 0;
-}
-
-/*
-* FuzzOpenLog
-*
-* Purpose:
-*
-* Open COM1 port for logging.
-*
-*/
-BOOL FuzzOpenLog(
-    _Out_ PHANDLE LogHandle,
-    _Out_opt_ PDWORD LastError
-)
-{
-    HANDLE	hFile;
-    CHAR	szWelcome[128];
-    DWORD	bytesIO;
-
-    hFile = CreateFile(TEXT("COM1"),
-        GENERIC_WRITE | SYNCHRONIZE,
-        FILE_SHARE_READ | FILE_SHARE_WRITE,
-        NULL,
-        OPEN_EXISTING,
-        FILE_FLAG_WRITE_THROUGH,
-        NULL);
-
-    if (LastError)
-        *LastError = GetLastError();
-
-    if (hFile != INVALID_HANDLE_VALUE) {
-
-        _strcpy_a(szWelcome, "\r\n[NC64] Logging start.\r\n");
-        WriteFile(hFile, (LPCVOID)&szWelcome,
-            (DWORD)_strlen_a(szWelcome), &bytesIO, NULL);
-
-        *LogHandle = hFile;
-        return TRUE;
-    }
-
-    *LogHandle = INVALID_HANDLE_VALUE;
-
     return FALSE;
 }
 
-/*
-* FuzzCloseLog
-*
-* Purpose:
-*
-* Close COM1 port.
-*
-*/
-VOID FuzzCloseLog(
-    _Inout_ PHANDLE LogHandle
-)
-{
-    CHAR	szBye[128];
-    DWORD	bytesIO;
-
-    HANDLE logHandle = *LogHandle;
-
-    if (logHandle == INVALID_HANDLE_VALUE)
-        return;
-
-    _strcpy_a(szBye, "\r\n[NC64] Log stop.\r\n");
-    WriteFile(logHandle,
-        (LPCVOID)&szBye, (DWORD)_strlen_a(szBye), &bytesIO, NULL);
-
-    CloseHandle(logHandle);
-    *LogHandle = INVALID_HANDLE_VALUE;
-}
-
-/*
-* FuzzLogCallName
-*
-* Purpose:
-*
-* Send syscall name to the log before it is not too late.
-*
-*/
-VOID FuzzLogCallName(
-    _In_ HANDLE LogHandle,
-    _In_ LPCSTR ServiceName
-)
-{
-    ULONG bytesIO;
-    CHAR szLog[128];
-
-    if (LogHandle) {
-        WriteFile(LogHandle, (LPCVOID)ServiceName,
-            (DWORD)_strlen_a(ServiceName), &bytesIO, NULL);
-
-        _strcpy_a(szLog, "\r\n");
-        WriteFile(LogHandle, (LPCVOID)&szLog,
-            (DWORD)_strlen_a(szLog), &bytesIO, NULL);
-    }
-}
-
-/*
-* FuzzLogCallParameters
-*
-* Purpose:
-*
-* Send syscall parameters to the log before it is not too late.
-*
-*/
-VOID FuzzLogCallParameters(
-    _In_ HANDLE LogHandle,
-    _In_ ULONG ServiceId,
-    _In_ ULONG NumberOfArguments,
-    _In_ ULONG_PTR *Arguments
-)
-{
-    ULONG i;
-    DWORD bytesIO;
-    CHAR szLog[2048];
-
-    if (LogHandle == INVALID_HANDLE_VALUE)
-        return;
-
-    _strcpy_a(szLog, "[NC64] ");
-    ultostr_a(ServiceId, _strend_a(szLog));
-    ultostr_a(NumberOfArguments, _strcat_a(szLog, "\t"));
-    _strcat_a(szLog, "\t");
-
-    for (i = 0; i < NumberOfArguments; i++) {
-        u64tohex_a(Arguments[i], _strcat_a(szLog, " "));
-    }
-    _strcat_a(szLog, "\r\n");
-    WriteFile(LogHandle, (LPCVOID)&szLog,
-        (DWORD)_strlen_a(szLog), &bytesIO, NULL);
-}
 
 /*
 * IsUserInAdminGroup
@@ -484,7 +206,9 @@ VOID FuzzLogCallParameters(
 * Returns TRUE if current user is in admin group.
 *
 */
-BOOLEAN IsUserInAdminGroup()
+BOOLEAN IsUserInAdminGroup(
+    VOID
+)
 {
     BOOLEAN bResult = FALSE;
     HANDLE hToken;
@@ -618,212 +342,6 @@ PCHAR PELoaderGetProcNameBySDTIndex(
     }
 
     return NULL;
-}
-
-/*
-* FuzzEnumWin32uServices
-*
-* Purpose:
-*
-* Enumerate win32u module services to the table.
-*
-*/
-_Success_(return != 0)
-ULONG FuzzEnumWin32uServices(
-    _In_ HANDLE HeapHandle,
-    _In_ LPVOID Module,
-    _Out_ PWIN32_SHADOWTABLE* Table
-)
-{
-    PIMAGE_NT_HEADERS           NtHeaders;
-    PIMAGE_EXPORT_DIRECTORY		exp;
-    PDWORD						FnPtrTable, NameTable;
-    PWORD						NameOrdTable;
-    ULONG_PTR					fnptr, exprva, expsize;
-    ULONG						c, n, result;
-    PWIN32_SHADOWTABLE			NewEntry;
-
-    NtHeaders = RtlImageNtHeader(Module);
-    if (NtHeaders->OptionalHeader.NumberOfRvaAndSizes <= IMAGE_DIRECTORY_ENTRY_EXPORT)
-        return 0;
-
-    exprva = NtHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
-    if (exprva == 0)
-        return 0;
-
-    expsize = NtHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].Size;
-
-    exp = (PIMAGE_EXPORT_DIRECTORY)((ULONG_PTR)Module + exprva);
-    FnPtrTable = (PDWORD)((ULONG_PTR)Module + exp->AddressOfFunctions);
-    NameTable = (PDWORD)((ULONG_PTR)Module + exp->AddressOfNames);
-    NameOrdTable = (PWORD)((ULONG_PTR)Module + exp->AddressOfNameOrdinals);
-
-    result = 0;
-
-    for (c = 0; c < exp->NumberOfFunctions; ++c)
-    {
-        fnptr = (ULONG_PTR)Module + FnPtrTable[c];
-        if (*(PDWORD)fnptr != 0xb8d18b4c) //mov r10, rcx; mov eax
-            continue;
-
-        NewEntry = (PWIN32_SHADOWTABLE)HeapAlloc(HeapHandle,
-            HEAP_ZERO_MEMORY, sizeof(WIN32_SHADOWTABLE));
-
-        if (NewEntry == NULL)
-            break;
-
-        NewEntry->Index = *(PDWORD)(fnptr + 4);
-
-        for (n = 0; n < exp->NumberOfNames; ++n)
-        {
-            if (NameOrdTable[n] == c)
-            {
-                _strncpy_a(&NewEntry->Name[0],
-                    sizeof(NewEntry->Name),
-                    (LPCSTR)((ULONG_PTR)Module + NameTable[n]),
-                    sizeof(NewEntry->Name));
-
-                break;
-            }
-        }
-
-        ++result;
-
-        *Table = NewEntry;
-        Table = &NewEntry->NextService;
-    }
-
-    return result;
-}
-
-/*
-* FuzzResolveW32kServiceNameById
-*
-* Purpose:
-*
-* Return service name if found by id in prebuilt lookup table.
-*
-*/
-PCHAR FuzzResolveW32kServiceNameById(
-    _In_ ULONG ServiceId,
-    _In_ PWIN32_SHADOWTABLE ShadowTable
-)
-{
-    PWIN32_SHADOWTABLE Entry = ShadowTable;
-
-    while (Entry) {
-
-        if (Entry->Index == ServiceId) {
-            return Entry->Name;
-        }
-        Entry = Entry->NextService;
-    }
-
-    return NULL;
-}
-
-/*
-* FuzzFind_KiServiceTable
-*
-* Purpose:
-*
-* Locate KiServiceTable in mapped ntoskrnl copy.
-*
-*/
-BOOL FuzzFind_KiServiceTable(
-    _In_ ULONG_PTR MappedImageBase,
-    _In_ PRAW_SERVICE_TABLE ServiceTable
-)
-{
-    ULONG_PTR             SectionPtr = 0;
-    IMAGE_NT_HEADERS     *NtHeaders = RtlImageNtHeader((PVOID)MappedImageBase);
-    IMAGE_SECTION_HEADER *SectionTableEntry;
-    ULONG                 c, p, SectionSize = 0, SectionVA = 0;
-
-    const BYTE  KiSystemServiceStartPattern[] = { 0x45, 0x33, 0xC9, 0x44, 0x8B, 0x05 };
-
-    SectionTableEntry = (PIMAGE_SECTION_HEADER)((PCHAR)NtHeaders +
-        sizeof(ULONG) +
-        sizeof(IMAGE_FILE_HEADER) +
-        NtHeaders->FileHeader.SizeOfOptionalHeader);
-
-    c = NtHeaders->FileHeader.NumberOfSections;
-    while (c > 0) {
-        if (*(PULONG)SectionTableEntry->Name == 'EGAP')
-            if ((SectionTableEntry->Name[4] == 'L') &&
-                (SectionTableEntry->Name[5] == 'K') &&
-                (SectionTableEntry->Name[6] == 0))
-
-            {
-                SectionVA = SectionTableEntry->VirtualAddress;
-                SectionPtr = (ULONG_PTR)(MappedImageBase + SectionVA);
-                SectionSize = SectionTableEntry->Misc.VirtualSize;
-                break;
-            }
-        c -= 1;
-        SectionTableEntry += 1;
-    }
-
-    if ((SectionPtr == 0) || (SectionSize == 0) || (SectionVA == 0)) {
-        return FALSE;
-    }
-
-    p = 0;
-    for (c = 0; c < (SectionSize - sizeof(KiSystemServiceStartPattern)); c++)
-        if (RtlCompareMemory(
-            (PVOID)(SectionPtr + c),
-            KiSystemServiceStartPattern,
-            sizeof(KiSystemServiceStartPattern)) == sizeof(KiSystemServiceStartPattern))
-        {
-            p = SectionVA + c;
-            break;
-        }
-
-    if (p == 0)
-        return FALSE;
-
-    p += 3;
-    c = *((PULONG)(MappedImageBase + p + 3)) + 7 + p;
-    ServiceTable->CountOfEntries = *((PULONG)(MappedImageBase + c));
-    p += 7;
-    c = *((PULONG)(MappedImageBase + p + 3)) + 7 + p;
-    ServiceTable->StackArgumentTable = (PBYTE)MappedImageBase + c;
-    p += 7;
-    c = *((PULONG)(MappedImageBase + p + 3)) + 7 + p;
-    ServiceTable->ServiceTable = (LPVOID *)(MappedImageBase + c);
-
-    return TRUE;
-}
-
-/*
-* FuzzFind_W32pServiceTable
-*
-* Purpose:
-*
-* Locate shadow table info in mapped win32k copy.
-*
-*/
-BOOL FuzzFind_W32pServiceTable(
-    _In_ HMODULE MappedImageBase,
-    _In_ PRAW_SERVICE_TABLE ServiceTable
-)
-{
-    PULONG ServiceLimit;
-
-    ServiceLimit = (ULONG*)GetProcAddress(MappedImageBase, "W32pServiceLimit");
-    if (ServiceLimit == NULL)
-        return FALSE;
-
-    ServiceTable->CountOfEntries = *ServiceLimit;
-    ServiceTable->StackArgumentTable = (PBYTE)GetProcAddress(MappedImageBase, "W32pArgumentTable");
-    if (ServiceTable->StackArgumentTable == NULL)
-        return FALSE;
-
-    ServiceTable->ServiceTable = (LPVOID *)GetProcAddress(MappedImageBase, "W32pServiceTable");
-    if (ServiceTable->ServiceTable == NULL)
-        return FALSE;
-
-    return TRUE;
 }
 
 /*
@@ -1143,10 +661,12 @@ VOID supShowNtStatus(
         _strcat_a(lpMsg, lpText);
         ultohex_a((ULONG)Status, _strend_a(lpMsg));
         _strcat_a(lpMsg, "\r\n");
-        FuzzShowMessage(lpMsg, FOREGROUND_RED | FOREGROUND_INTENSITY);
+        ConsoleShowMessage(lpMsg, FOREGROUND_RED | FOREGROUND_INTENSITY);
         supHeapFree(lpMsg);
     }
 }
+
+#define SI_MAX_BUFFER_LENGTH (512 * 1024 * 1024)
 
 /*
 * supGetSystemInfo
@@ -1156,46 +676,43 @@ VOID supShowNtStatus(
 * Returns buffer with system information by given InfoClass.
 *
 * Returned buffer must be freed with supHeapFree after usage.
-* Function will return error after 20 attempts.
 *
 */
 PVOID supGetSystemInfo(
-    _In_ SYSTEM_INFORMATION_CLASS InfoClass
+    _In_ SYSTEM_INFORMATION_CLASS SystemInformationClass
 )
 {
-    INT			c = 0;
-    PVOID		Buffer = NULL;
-    ULONG		Size = PAGE_SIZE;
-    NTSTATUS	status;
-    ULONG       memIO;
+    PVOID       buffer = NULL;
+    ULONG       bufferSize = PAGE_SIZE;
+    NTSTATUS    ntStatus;
+    ULONG       returnedLength = 0;
 
-    do {
-        Buffer = supHeapAlloc((SIZE_T)Size);
-        if (Buffer != NULL) {
-            status = NtQuerySystemInformation(InfoClass, Buffer, Size, &memIO);
-        }
-        else {
+    buffer = supHeapAlloc((SIZE_T)bufferSize);
+    if (buffer == NULL)
+        return NULL;
+
+    while ((ntStatus = NtQuerySystemInformation(
+        SystemInformationClass,
+        buffer,
+        bufferSize,
+        &returnedLength)) == STATUS_INFO_LENGTH_MISMATCH)
+    {
+        supHeapFree(buffer);
+        bufferSize *= 2;
+
+        if (bufferSize > SI_MAX_BUFFER_LENGTH)
             return NULL;
-        }
-        if (status == STATUS_INFO_LENGTH_MISMATCH) {
-            supHeapFree(Buffer);
-            Buffer = NULL;
-            Size *= 2;
-            c++;
-            if (c > 20) {
-                status = STATUS_SECRET_TOO_LONG;
-                break;
-            }
-        }
-    } while (status == STATUS_INFO_LENGTH_MISMATCH);
 
-    if (NT_SUCCESS(status)) {
-        return Buffer;
+        buffer = supHeapAlloc((SIZE_T)bufferSize);
     }
 
-    if (Buffer) {
-        supHeapFree(Buffer);
+    if (NT_SUCCESS(ntStatus)) {
+        return buffer;
     }
+
+    if (buffer)
+        supHeapFree(buffer);
+
     return NULL;
 }
 
@@ -1271,7 +788,10 @@ VOID RunAsLocalSystem(
 
     SECURITY_QUALITY_OF_SERVICE sqos;
     OBJECT_ATTRIBUTES obja;
-    TOKEN_PRIVILEGES *TokenPrivileges;
+    TOKEN_PRIVILEGES* TokenPrivileges;
+
+    BYTE TokenPrivBufffer[sizeof(TOKEN_PRIVILEGES) +
+        (1 * sizeof(LUID_AND_ATTRIBUTES))];
 
     WCHAR szApplication[MAX_PATH * 2];
 
@@ -1373,9 +893,7 @@ VOID RunAsLocalSystem(
         //
         // Turn on AssignPrimaryToken privilege in impersonated token.
         //
-        TokenPrivileges = (TOKEN_PRIVILEGES*)_alloca(sizeof(TOKEN_PRIVILEGES) +
-            (1 * sizeof(LUID_AND_ATTRIBUTES)));
-
+        TokenPrivileges = (TOKEN_PRIVILEGES*)&TokenPrivBufffer;
         TokenPrivileges->PrivilegeCount = 1;
         TokenPrivileges->Privileges[0].Luid.LowPart = SE_ASSIGNPRIMARYTOKEN_PRIVILEGE;
         TokenPrivileges->Privileges[0].Luid.HighPart = 0;
@@ -1497,7 +1015,9 @@ HANDLE supGetCurrentProcessToken(
 * Returns TRUE if current user is LocalSystem.
 *
 */
-BOOLEAN IsLocalSystem()
+BOOLEAN IsLocalSystem(
+    VOID
+)
 {
     BOOLEAN bResult = FALSE;
     HANDLE hToken;

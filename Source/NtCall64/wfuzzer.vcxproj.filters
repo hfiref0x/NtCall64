@@ -13,64 +13,19 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
-    <Filter Include="Source Files\minirtl">
-      <UniqueIdentifier>{dbdee2ca-0dae-4bde-bffb-7d041edb6591}</UniqueIdentifier>
-    </Filter>
     <Filter Include="hde">
       <UniqueIdentifier>{380df33f-96ba-42ba-959c-0b631d9b0b24}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="minirtl">
+      <UniqueIdentifier>{2f4e4843-4b3c-4e51-bf4e-27cd8e8dc260}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="minirtl\ultostr.c">
-      <Filter>Source Files\minirtl</Filter>
-    </ClCompile>
-    <ClCompile Include="minirtl\_strcat.c">
-      <Filter>Source Files\minirtl</Filter>
-    </ClCompile>
-    <ClCompile Include="minirtl\_strlen.c">
-      <Filter>Source Files\minirtl</Filter>
-    </ClCompile>
-    <ClCompile Include="minirtl\_strcpy.c">
-      <Filter>Source Files\minirtl</Filter>
-    </ClCompile>
-    <ClCompile Include="minirtl\_strcmp.c">
-      <Filter>Source Files\minirtl</Filter>
-    </ClCompile>
-    <ClCompile Include="minirtl\_strend.c">
-      <Filter>Source Files\minirtl</Filter>
-    </ClCompile>
-    <ClCompile Include="minirtl\_strncpy.c">
-      <Filter>Source Files\minirtl</Filter>
-    </ClCompile>
-    <ClCompile Include="minirtl\_strncmp.c">
-      <Filter>Source Files\minirtl</Filter>
-    </ClCompile>
-    <ClCompile Include="minirtl\_strcmpi.c">
-      <Filter>Source Files\minirtl</Filter>
-    </ClCompile>
-    <ClCompile Include="minirtl\u64tohex.c">
-      <Filter>Source Files\minirtl</Filter>
-    </ClCompile>
-    <ClCompile Include="minirtl\u64tostr.c">
-      <Filter>Source Files\minirtl</Filter>
-    </ClCompile>
     <ClCompile Include="util.c">
       <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="minirtl\ultohex.c">
-      <Filter>Source Files\minirtl</Filter>
-    </ClCompile>
-    <ClCompile Include="minirtl\_filename.c">
-      <Filter>Source Files\minirtl</Filter>
-    </ClCompile>
-    <ClCompile Include="minirtl\cmdline.c">
-      <Filter>Source Files\minirtl</Filter>
-    </ClCompile>
-    <ClCompile Include="minirtl\strtoul.c">
-      <Filter>Source Files\minirtl</Filter>
     </ClCompile>
     <ClCompile Include="hde\hde64.c">
       <Filter>hde</Filter>
@@ -78,19 +33,64 @@
     <ClCompile Include="fuzz.c">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="minirtl\_filename.c">
+      <Filter>minirtl</Filter>
+    </ClCompile>
+    <ClCompile Include="minirtl\_strcat.c">
+      <Filter>minirtl</Filter>
+    </ClCompile>
+    <ClCompile Include="minirtl\_strcmp.c">
+      <Filter>minirtl</Filter>
+    </ClCompile>
+    <ClCompile Include="minirtl\_strcmpi.c">
+      <Filter>minirtl</Filter>
+    </ClCompile>
+    <ClCompile Include="minirtl\_strcpy.c">
+      <Filter>minirtl</Filter>
+    </ClCompile>
+    <ClCompile Include="minirtl\_strend.c">
+      <Filter>minirtl</Filter>
+    </ClCompile>
+    <ClCompile Include="minirtl\_strlen.c">
+      <Filter>minirtl</Filter>
+    </ClCompile>
+    <ClCompile Include="minirtl\_strncmp.c">
+      <Filter>minirtl</Filter>
+    </ClCompile>
+    <ClCompile Include="minirtl\_strncpy.c">
+      <Filter>minirtl</Filter>
+    </ClCompile>
+    <ClCompile Include="minirtl\cmdline.c">
+      <Filter>minirtl</Filter>
+    </ClCompile>
     <ClCompile Include="minirtl\strtou64.c">
-      <Filter>Source Files\minirtl</Filter>
+      <Filter>minirtl</Filter>
+    </ClCompile>
+    <ClCompile Include="minirtl\strtoul.c">
+      <Filter>minirtl</Filter>
+    </ClCompile>
+    <ClCompile Include="minirtl\u64tohex.c">
+      <Filter>minirtl</Filter>
+    </ClCompile>
+    <ClCompile Include="minirtl\u64tostr.c">
+      <Filter>minirtl</Filter>
+    </ClCompile>
+    <ClCompile Include="minirtl\ultohex.c">
+      <Filter>minirtl</Filter>
+    </ClCompile>
+    <ClCompile Include="minirtl\ultostr.c">
+      <Filter>minirtl</Filter>
+    </ClCompile>
+    <ClCompile Include="blacklist.c">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="log.c">
+      <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
-    <ClInclude Include="minirtl\minirtl.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="ntos.h">
       <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="main.h">
-      <Filter>Source Files</Filter>
     </ClInclude>
     <ClInclude Include="fuzz.h">
       <Filter>Header Files</Filter>
@@ -100,12 +100,6 @@
     </ClInclude>
     <ClInclude Include="tables.h">
       <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="minirtl\_filename.h">
-      <Filter>Source Files\minirtl</Filter>
-    </ClInclude>
-    <ClInclude Include="minirtl\cmdline.h">
-      <Filter>Source Files\minirtl</Filter>
     </ClInclude>
     <ClInclude Include="resource.h">
       <Filter>Header Files</Filter>
@@ -118,6 +112,27 @@
     </ClInclude>
     <ClInclude Include="hde\table64.h">
       <Filter>hde</Filter>
+    </ClInclude>
+    <ClInclude Include="minirtl\minirtl.h">
+      <Filter>minirtl</Filter>
+    </ClInclude>
+    <ClInclude Include="minirtl\rtltypes.h">
+      <Filter>minirtl</Filter>
+    </ClInclude>
+    <ClInclude Include="minirtl\_filename.h">
+      <Filter>minirtl</Filter>
+    </ClInclude>
+    <ClInclude Include="minirtl\cmdline.h">
+      <Filter>minirtl</Filter>
+    </ClInclude>
+    <ClInclude Include="blacklist.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="log.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="global.h">
+      <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

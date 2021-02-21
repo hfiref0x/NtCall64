@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016 - 2019
+*  (C) COPYRIGHT AUTHORS, 2016 - 2021
 *
-*  TITLE:       MAIN.H
+*  TITLE:       GLOBAL.H
 *
-*  VERSION:     1.33
+*  VERSION:     1.35
 *
-*  DATE:        22 Nov 2019
+*  DATE:        21 Feb 2021
 *
 *  Global definitions.
 *
@@ -27,6 +27,7 @@
 #ifdef _DEBUG
 #pragma comment(lib, "vcruntimed.lib")
 #pragma comment(lib, "ucrtd.lib")
+#pragma comment(lib, "ucrt.lib")
 #else
 #pragma comment(lib, "libucrt.lib")
 #pragma comment(lib, "libvcruntime.lib")
@@ -44,21 +45,25 @@
 #include "minirtl\minirtl.h"
 #include "minirtl\_filename.h"
 #include "minirtl\cmdline.h"
+#include "blacklist.h"
+#include "util.h"
+#include "log.h"
+
+#pragma comment(lib, "Version.lib")
 
 typedef struct _RAW_SERVICE_TABLE {
     ULONG   CountOfEntries;
-    LPVOID  *ServiceTable;
+    LPVOID* ServiceTable;
     PBYTE   StackArgumentTable;
-} RAW_SERVICE_TABLE, *PRAW_SERVICE_TABLE;
+} RAW_SERVICE_TABLE, * PRAW_SERVICE_TABLE;
 
 typedef struct _CALL_PARAM {
     ULONG Syscall;
     ULONG ParametersInStack;
     ULONG ThreadTimeout;
     ULONG64 NumberOfPassesForCall;
+    PVOID LogParams;
 } CALL_PARAM, *PCALL_PARAM;
-
-#include "util.h"
 
 typedef struct _NTCALL_CONTEXT {
     BOOL LogEnabled;
@@ -70,7 +75,6 @@ typedef struct _NTCALL_CONTEXT {
     ULONG SingleSyscallId;
     ULONG ThreadWaitTimeout;
     ULONG64 SyscallPassCount;
-    HANDLE LogHandle;
     ULONG_PTR hNtdll;
     ULONG_PTR SystemImageBase;
     CHAR **Win32pServiceTableNames;
@@ -79,7 +83,18 @@ typedef struct _NTCALL_CONTEXT {
     WCHAR szSystemDirectory[MAX_PATH + 1];
 } NTCALL_CONTEXT, *PNTCALL_CONTEXT;
 
+typedef struct _NTCALL_FUZZ_PARAMS {
+    BOOL EnableLog;
+    BOOL LogToFile;
+    BOOL ProbeWin32k;
+    BOOL ProbeSingleSyscall;
+    ULONG SingleSyscallId;
+    ULONG ThreadWaitTimeout;
+    ULONG64 SyscallPassCount;
+    WCHAR szLogDeviceOrFile[MAX_PATH + 1];
+} NTCALL_FUZZ_PARAMS, *PNTCALL_FUZZ_PARAMS;
+
 extern NTCALL_CONTEXT g_ctx;
+extern NTCALL_LOG_PARAMS g_Log;
 
 #include "fuzz.h"
-

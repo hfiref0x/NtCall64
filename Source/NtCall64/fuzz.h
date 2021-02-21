@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016 - 2019
+*  (C) COPYRIGHT AUTHORS, 2016 - 2021
 *
 *  TITLE:       FUZZ.H
 *
-*  VERSION:     1.33
+*  VERSION:     1.35
 *
-*  DATE:        22 Nov 2019
+*  DATE:        21 Feb 2021
 *
 * THIS CODE AND INFORMATION IS PROVIDED "AS IS" WITHOUT WARRANTY OF
 * ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED
@@ -15,8 +15,6 @@
 *
 *******************************************************************************/
 #pragma once
-
-#include "main.h"
 
 #define W32SYSCALLSTART     0x1000
 #define MAX_PARAMETERS		32
@@ -38,3 +36,11 @@ VOID FuzzRun(
 BOOL FuzzLookupWin32kNames(
     _In_ LPWSTR ModuleName,
     _Inout_ NTCALL_CONTEXT *Context);
+
+BOOL FuzzFindW32pServiceTable(
+    _In_ HMODULE MappedImageBase,
+    _In_ PRAW_SERVICE_TABLE ServiceTable);
+
+BOOL FuzzFindKiServiceTable(
+    _In_ ULONG_PTR MappedImageBase,
+    _In_ PRAW_SERVICE_TABLE ServiceTable);
