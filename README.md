@@ -100,6 +100,7 @@ This program may crash the operation system, affect it stability, which may resu
 * [win32k!NtUserSetWindowsHookEx](https://gist.github.com/hfiref0x/8ecfbcc0a7afcc9917cef093ef3a18b2)
 * [nt!NtLoadEnclaveData](https://gist.githubusercontent.com/hfiref0x/1ac328a8e73d053012e02955d38e36a8/raw/b26174f8b7b68506d62308ce4327dfc573b8aa26/main.c)
 * [nt!NtCreateIoRing](https://gist.github.com/hfiref0x/bd6365a7cfa881da0e9c9e7a917a051b)
+* [nt!NtQueryInformationCpuPartition](https://gist.github.com/hfiref0x/48bdc12241d0a981a6da473e979c8aff)
 
 
 # Build
