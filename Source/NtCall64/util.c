@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016 - 2021
+*  (C) COPYRIGHT AUTHORS, 2016 - 2022
 *
 *  TITLE:       UTIL.C
 *
-*  VERSION:     1.35
+*  VERSION:     1.36
 *
-*  DATE:        21 Feb 2021
+*  DATE:        04 Sep 2022
 *
 *  Support routines.
 *
@@ -173,6 +173,9 @@ BOOL GetCommandLineOption(
     TCHAR   Param[MAX_PATH + 1];
     ULONG   rlen;
     int		i = 0;
+
+    if (ParamLength)
+        *ParamLength = 0;
 
     RtlSecureZeroMemory(Param, sizeof(Param));
     while (GetCommandLineParam(cmdline, i, Param, MAX_PATH, &rlen))

@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016 - 2021
+*  (C) COPYRIGHT AUTHORS, 2016 - 2022
 *
 *  TITLE:       UTIL.H
 *
-*  VERSION:     1.35
+*  VERSION:     1.36
 *
-*  DATE:        21 Feb 2021
+*  DATE:        04 Sep 2022
 *
 * THIS CODE AND INFORMATION IS PROVIDED "AS IS" WITHOUT WARRANTY OF
 * ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED

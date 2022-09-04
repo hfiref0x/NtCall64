@@ -6,7 +6,7 @@ This program based on NtCall by Peter Kosyh. It isn't advanced version and its p
 
 # System Requirements
 
-+ x64 Windows 7/8/8.1/10;
++ x64 Windows 7/8/8.1/10/11;
 + Account with administrative privileges (optional).
 
 # Usage
@@ -114,14 +114,15 @@ In order to build from source you need Microsoft Visual Studio 2015 and later ve
   * v120 for Visual Studio 2013;
   * v140 for Visual Studio 2015; 
   * v141 for Visual Studio 2017;
-  * v142 for Visual Studio 2019.
+  * v142 for Visual Studio 2019;
+  * v143 for Visual Studio 2022.
 * For v140 and above set Target Platform Version (Project->Properties->General):
   * If v140 then select 8.1;
-  * If v141/v142 then select 10.
+  * If v141 and above then select 10.
 * Minimum required Windows SDK version 8.1  
 
 # Authors
 
-(c) 2016 - 2021 NTCALL64 Project
+(c) 2016 - 2022 NTCALL64 Project
 
 Original NtCall by Peter Kosyh aka Gloomy (c) 2001, http://gl00my.chat.ru/ 

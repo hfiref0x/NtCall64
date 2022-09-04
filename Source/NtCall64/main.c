@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016 - 2021
+*  (C) COPYRIGHT AUTHORS, 2016 - 2022
 *
 *  TITLE:       MAIN.C
 *
-*  VERSION:     1.35
+*  VERSION:     1.36
 *
-*  DATE:        21 Feb 2021
+*  DATE:        04 Sep 2022
 *
 *  Program entry point.
 *
@@ -33,7 +33,7 @@
 #define DEFAULT_LOG_FILE    TEXT("ntcall64.log")
 
 #define WELCOME_BANNER      "NtCall64, Windows NT x64 syscall fuzzer, based on NtCall by Peter Kosyh.\r\n"
-#define VERSION_BANNER      "Version 1.3.5 from 21 Feb 2021\r\n\n"
+#define VERSION_BANNER      "Version 1.3.6 from 04 Sep 2022\r\n\n"
 
 //
 // Help output.
@@ -473,7 +473,6 @@ VOID FuzzInitPhase0(
                 if (rLen) {
                     _strcpy(fuzzParams.szLogDeviceOrFile, szTextBuf);
                 }
-                fuzzParams.LogToFile = FALSE;
             }
             else {
 
