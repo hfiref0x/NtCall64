@@ -24,7 +24,7 @@
     <ClCompile Include="main.c">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="util.c">
+    <ClCompile Include="sup.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="hde\hde64.c">
@@ -95,7 +95,7 @@
     <ClInclude Include="fuzz.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="util.h">
+    <ClInclude Include="sup.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="tables.h">
@@ -132,6 +132,9 @@
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="global.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="ntbuilds.h">
       <Filter>Header Files</Filter>
     </ClInclude>
   </ItemGroup>

@@ -20,6 +20,7 @@ NTCALL64 -help[-win32k][-log][-call Id][-pc Value][-wt Value][-s]
 * -call Id   - fuzz syscall by supplied id (id can be from any table ntos/win32k);
 * -pc Value  - set pass count for each syscall (maximum value is limited to ULONG64 max value), default value 65536;
 * -wt Value  - set wait timeout for calling threads in seconds (except single syscall fuzzing), default value is 30;
+* -start Id  - Fuzz syscall table starting from given syscall id, mutual exclusive with -call;
 * -s         - Attempt to run program from LocalSystem account.
 
 
@@ -62,6 +63,7 @@ Example of badcalls.ini (default config shipped with program)
 
 <pre>[ntos]
 NtClose
+NtInitiatePowerAction
 NtRaiseHardError
 NtReleaseKeyedEvent
 NtPropagationComplete
@@ -98,6 +100,7 @@ This program may crash the operation system, affect it stability, which may resu
 * [win32k!NtUserCreateActivationObject](https://gist.githubusercontent.com/hfiref0x/23a2331588e7765664f50cac26cf0637/raw/49457ef5e30049b6b4ca392e489aaceaafe2b280/NtUserCreateActivationObject.cpp)
 * [win32k!NtUserOpenDesktop](https://gist.githubusercontent.com/hfiref0x/6e726b352da7642fc5b84bf6ebce0007/raw/8df05220f194da4980f401e15a0efdb7694deb26/NtUserOpenDesktop.c)
 * [win32k!NtUserSetWindowsHookEx](https://gist.github.com/hfiref0x/8ecfbcc0a7afcc9917cef093ef3a18b2)
+* [win32k!NtUserInitialize -> win32kbase!Win32kBaseUserInitialize] (https://gist.github.com/hfiref0x/f731e690e6155c6763b801ce0e497db7)
 * [nt!NtLoadEnclaveData](https://gist.githubusercontent.com/hfiref0x/1ac328a8e73d053012e02955d38e36a8/raw/b26174f8b7b68506d62308ce4327dfc573b8aa26/main.c)
 * [nt!NtCreateIoRing](https://gist.github.com/hfiref0x/bd6365a7cfa881da0e9c9e7a917a051b)
 * [nt!NtQueryInformationCpuPartition](https://gist.github.com/hfiref0x/48bdc12241d0a981a6da473e979c8aff)
@@ -106,13 +109,11 @@ This program may crash the operation system, affect it stability, which may resu
 # Build
 
 NTCALL64 comes with full source code written in C with tiny assembler usage.
-In order to build from source you need Microsoft Visual Studio 2015 and later versions.
+In order to build from source you need Microsoft Visual Studio 2017 and later versions.
 
 ## Instructions
 
 * Select Platform ToolSet first for project in solution you want to build (Project->Properties->General): 
-  * v120 for Visual Studio 2013;
-  * v140 for Visual Studio 2015; 
   * v141 for Visual Studio 2017;
   * v142 for Visual Studio 2019;
   * v143 for Visual Studio 2022.
@@ -123,6 +124,6 @@ In order to build from source you need Microsoft Visual Studio 2015 and later ve
 
 # Authors
 
-(c) 2016 - 2022 NTCALL64 Project
+(c) 2016 - 2023 NTCALL64 Project
 
 Original NtCall by Peter Kosyh aka Gloomy (c) 2001, http://gl00my.chat.ru/ 

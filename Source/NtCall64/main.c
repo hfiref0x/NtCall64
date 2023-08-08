@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016 - 2022
+*  (C) COPYRIGHT AUTHORS, 2016 - 2023
 *
 *  TITLE:       MAIN.C
 *
-*  VERSION:     1.36
+*  VERSION:     1.37
 *
-*  DATE:        04 Sep 2022
+*  DATE:        04 Aug 2023
 *
 *  Program entry point.
 *
@@ -28,25 +28,27 @@
 #define PARAM_WAITTIMEOUT   TEXT("-wt")
 #define PARAM_HELP          TEXT("-help")
 #define PARAM_LOCALSYSTEM   TEXT("-s")
+#define PARAM_SYSCALL_START TEXT("-start")
 
 #define DEFAULT_LOG_PORT    TEXT("COM1")
 #define DEFAULT_LOG_FILE    TEXT("ntcall64.log")
 
 #define WELCOME_BANNER      "NtCall64, Windows NT x64 syscall fuzzer, based on NtCall by Peter Kosyh.\r\n"
-#define VERSION_BANNER      "Version 1.3.6 from 04 Sep 2022\r\n\n"
+#define VERSION_BANNER      "Version 1.3.7 from 04 Aug 2023\r\n\n"
 
 //
 // Help output.
 //
 #define T_HELP	"Usage: -help [-win32k][-log [-pname][-ofile]][-call Id][-pc Value][-wt Value][-s]\r\n\
   -help     - Show this help information;\r\n\
-  -log      - Enable logging to file last call parameters;\r\n\
+  -log      - Enable logging to file last call parameters, use -ofile to specify file otherwise COM port will be used;\r\n\
   -pname    - Port name for logging, default COM1 (-log enabled required, mutual exclusive with -ofile);\r\n\
   -ofile    - File name for logging, default ntcall64.log (-log enabled required, mutual exclusive with -pname);\r\n\
   -win32k   - Fuzz win32k graphical subsystem table, otherwise fuzz ntos table;\r\n\
   -call Id  - Fuzz syscall by supplied numeric <Id> (can be from any table). All blacklists are ignored;\r\n\
   -pc Value - Set number of passes for each service to <Value>, default value 65536;\r\n\
   -wt Value - Set wait timeout for calling threads in seconds (except single syscall fuzzing), default value is 30;\r\n\
+  -start Id - Fuzz syscall table starting from given syscall id, mutual exclusive with -call;\r\n\
   -s        - Attempt to run program from LocalSystem account.\r\n\n\
 Example: ntcall64.exe -win32k -log"
 
@@ -133,36 +135,40 @@ void FuzzInitPhase2(
     BOOL probeWin32k = Context->ProbeWin32k;
     ULONG d;
 
+    NTSTATUS ntStatus;
+    UNICODE_STRING usModule;
+
     WCHAR szBuffer[MAX_PATH * 2];
 
     ConsoleShowMessage("[+] Entering FuzzInitPhase2()\r\n",
         FOREGROUND_BLUE | FOREGROUND_GREEN | FOREGROUND_INTENSITY);
 
-    _strcpy(szBuffer, Context->szSystemDirectory);
+    _strcpy(szBuffer, L"\\systemroot\\system32\\");
     if (probeWin32k) {
-        _strcat(szBuffer, TEXT("\\win32k.sys"));
+        _strcat(szBuffer, TEXT("win32k.sys"));
     }
     else {
-        _strcat(szBuffer, TEXT("\\ntoskrnl.exe"));
+        _strcat(szBuffer, TEXT("ntoskrnl.exe"));
     }
 
-    Context->SystemImageBase = (ULONG_PTR)LoadLibraryEx(szBuffer, NULL, 0);
+    RtlInitUnicodeString(&usModule, szBuffer);
 
-    if (Context->SystemImageBase == 0) {
-        ConsoleShowMessage("[!] Could not preload system image, abort!\r\n",
-            FOREGROUND_RED | FOREGROUND_INTENSITY);
+    ntStatus = supMapImageNoExecute(&usModule, &Context->SystemModuleBase);
+
+    if (!NT_SUCCESS(ntStatus) || (Context->SystemModuleBase == NULL)) {
+        supShowNtStatus("[!] Could not preload system image, abort!\r\n", ntStatus);
         return;
     }
 
     if (probeWin32k) {
 
-        if (!FuzzFindW32pServiceTable((HMODULE)Context->SystemImageBase, &Context->ServiceTable)) {
+        if (!FuzzFindW32pServiceTable(Context->SystemModuleBase, &Context->ServiceTable)) {
             ConsoleShowMessage("[!] Could not find W32pServiceTable, abort!\r\n",
                 FOREGROUND_RED | FOREGROUND_INTENSITY);
             return;
         }
 
-        if (!FuzzLookupWin32kNames(szBuffer, Context)) {
+        if (!FuzzLookupWin32kNames(Context)) {
             ConsoleShowMessage("[!] Win32k names query error, abort!\r\n",
                 FOREGROUND_RED | FOREGROUND_INTENSITY);
             return;
@@ -170,14 +176,14 @@ void FuzzInitPhase2(
     }
     else {
 
-        Context->hNtdll = (ULONG_PTR)GetModuleHandle(TEXT("ntdll.dll"));
-        if (Context->hNtdll == 0) {
-            ConsoleShowMessage("[!] Ntdll not found, abort!\r\n",
+        Context->NtdllBase = (PVOID)GetModuleHandle(TEXT("ntdll.dll"));
+        if (Context->NtdllBase == NULL) {
+            ConsoleShowMessage("[!] NTDLL not found, abort!\r\n",
                 FOREGROUND_RED | FOREGROUND_INTENSITY);
             return;
         }
 
-        if (!FuzzFindKiServiceTable(Context->SystemImageBase, &Context->ServiceTable)) {
+        if (!FuzzFindKiServiceTable(Context->SystemModuleBase, &Context->ServiceTable)) {
             ConsoleShowMessage("[!] KiServiceTable not found, abort!\r\n",
                 FOREGROUND_RED | FOREGROUND_INTENSITY);
             return;
@@ -189,7 +195,7 @@ void FuzzInitPhase2(
     //
     if (Context->ProbeSingleSyscall) {
 
-        d = Context->SingleSyscallId;
+        d = Context->u1.SingleSyscallId;
 
         if (Context->ProbeWin32k) {
             d -= W32SYSCALLSTART;
@@ -207,7 +213,7 @@ void FuzzInitPhase2(
 
     FuzzRun(Context);
 
-    FreeLibrary((HMODULE)Context->SystemImageBase);
+    NtUnmapViewOfSection(NtCurrentProcess(), Context->SystemModuleBase);
 
     ConsoleShowMessage("[-] Leaving FuzzInitPhase2()\r\n",
         FOREGROUND_BLUE | FOREGROUND_GREEN | FOREGROUND_INTENSITY);
@@ -225,14 +231,12 @@ VOID FuzzInitPhase1(
     _In_ NTCALL_FUZZ_PARAMS* FuzzParams
 )
 {
+    BOOLEAN LogEnabled = FALSE;
     BOOLEAN bWasEnabled = FALSE;
     WORD wColor = 0;
     UINT i;
 
-    BOOL LogEnabled = FALSE;
     CHAR szOut[MAX_PATH * 2];
-    RTL_OSVERSIONINFOW osver;
-
 
     ConsoleShowMessage("[+] Entering FuzzInitPhase1()\r\n",
         FOREGROUND_BLUE | FOREGROUND_GREEN | FOREGROUND_INTENSITY);
@@ -242,8 +246,8 @@ VOID FuzzInitPhase1(
     if (g_ctx.IsLocalSystem)
         ConsoleShowMessage("[+] LocalSystem account\r\n", 0);
 
-    if (g_ctx.IsUserInAdminGroup) {
-        ConsoleShowMessage("[+] User is admin\r\n", 0);
+    if (g_ctx.IsUserFullAdmin) {
+        ConsoleShowMessage("[+] User is with admin privileges\r\n", 0);
 
         if (g_ctx.IsElevated) {
             ConsoleShowMessage("[+] NtCall64 runs elevated.\r\n", 0);
@@ -251,13 +255,6 @@ VOID FuzzInitPhase1(
         else {
             ConsoleShowMessage("[+] NtCall64 is not elevated, some privileges can not be adjusted.\r\n", 0);
         }
-    }
-
-    RtlSecureZeroMemory(g_ctx.szSystemDirectory, sizeof(g_ctx.szSystemDirectory));
-    if (!GetSystemDirectory(g_ctx.szSystemDirectory, MAX_PATH)) {
-        ConsoleShowMessage("[!] Could not query system directory, abort!\r\n",
-            FOREGROUND_RED | FOREGROUND_INTENSITY);
-        return;
     }
 
     //
@@ -279,17 +276,17 @@ VOID FuzzInitPhase1(
     //
     // Show version logo if possible.
     //
-    osver.dwOSVersionInfoSize = sizeof(osver);
-    RtlGetVersion(&osver);
+    g_ctx.OsVersion.dwOSVersionInfoSize = sizeof(g_ctx.OsVersion);
+    RtlGetVersion(&g_ctx.OsVersion);
 
     _strcpy_a(szOut, "[~] Windows version: ");
-    ultostr_a(osver.dwMajorVersion, _strend_a(szOut));
-    ultostr_a(osver.dwMinorVersion, _strcat_a(szOut, "."));
-    ultostr_a(osver.dwBuildNumber, _strcat_a(szOut, "."));
+    ultostr_a(g_ctx.OsVersion.dwMajorVersion, _strend_a(szOut));
+    ultostr_a(g_ctx.OsVersion.dwMinorVersion, _strcat_a(szOut, "."));
+    ultostr_a(g_ctx.OsVersion.dwBuildNumber, _strcat_a(szOut, "."));
     _strcat_a(szOut, "\r\n");
     ConsoleShowMessage(szOut, 0);
 
-    if (FuzzParams->EnableLog) {
+    if (FuzzParams->LogEnabled) {
 
         g_Log.LogHandle = INVALID_HANDLE_VALUE;
         g_Log.LogToFile = FuzzParams->LogToFile;
@@ -304,9 +301,17 @@ VOID FuzzInitPhase1(
             ConsoleShowMessage(szOut, FOREGROUND_RED | FOREGROUND_INTENSITY);
 
         }
-        else
-            ConsoleShowMessage("[+] Logging is enabled\r\n",
+        else {
+            _strcpy_a(szOut, "[+] Logging is enabled, output will be written to ");
+
+            WideCharToMultiByte(CP_ACP, 0, FuzzParams->szLogDeviceOrFile, -1, 
+                _strend_a(szOut), MAX_PATH, NULL, NULL);
+
+            _strcat_a(szOut, "\r\n");
+            
+            ConsoleShowMessage(szOut,
                 FOREGROUND_BLUE | FOREGROUND_GREEN | FOREGROUND_INTENSITY);
+        }
 
         g_ctx.LogEnabled = LogEnabled;
 
@@ -319,9 +324,9 @@ VOID FuzzInitPhase1(
     // Handle single system call.
     //
     if (FuzzParams->ProbeSingleSyscall) {
-        g_ctx.ProbeWin32k = (FuzzParams->SingleSyscallId >= W32SYSCALLSTART);
+        g_ctx.ProbeWin32k = (FuzzParams->u1.SingleSyscallId >= W32SYSCALLSTART);
         g_ctx.ProbeSingleSyscall = TRUE;
-        g_ctx.SingleSyscallId = FuzzParams->SingleSyscallId;
+        g_ctx.u1.SingleSyscallId = FuzzParams->u1.SingleSyscallId;
     }
     else {
         g_ctx.ProbeWin32k = FuzzParams->ProbeWin32k;
@@ -343,6 +348,18 @@ VOID FuzzInitPhase1(
     ultostr_a(g_ctx.ThreadWaitTimeout, _strend_a(szOut));
     _strcat_a(szOut, "\r\n");
     ConsoleShowMessage(szOut, 0);
+
+    //
+    // Show probe from syscall id.
+    //
+    g_ctx.ProbeFromSyscallId = FuzzParams->ProbeFromSyscallId;
+    g_ctx.u1.StartingSyscallId = FuzzParams->u1.StartingSyscallId;
+    if (g_ctx.ProbeFromSyscallId) {
+        _strcpy_a(szOut, "[+] Starting syscall id ");
+        ultostr_a(g_ctx.u1.StartingSyscallId, _strend_a(szOut));
+        _strcat_a(szOut, "\r\n");
+        ConsoleShowMessage(szOut, 0);
+    }
 
     //
     // Assign much possible privileges if can.
@@ -393,7 +410,7 @@ VOID FuzzInitPhase1(
     }
 
     if (g_ctx.Win32pServiceTableNames)
-        HeapFree(GetProcessHeap(), 0, g_ctx.Win32pServiceTableNames);
+        supHeapFree(g_ctx.Win32pServiceTableNames);
 
     ConsoleShowMessage("[-] Leaving FuzzInitPhase1()\r\n",
         FOREGROUND_BLUE | FOREGROUND_GREEN | FOREGROUND_INTENSITY);
@@ -413,8 +430,10 @@ VOID FuzzInitPhase0(
 {
     ULONG rLen;
     NTCALL_FUZZ_PARAMS fuzzParams;
+    HANDLE hToken;
+    NTSTATUS ntStatus;
 
-    TCHAR szTextBuf[MAX_PATH + 1];
+    WCHAR szTextBuf[MAX_PATH + 1];
 
     do {
 
@@ -426,22 +445,42 @@ VOID FuzzInitPhase0(
         fuzzParams.SyscallPassCount = FUZZ_PASS_COUNT;
 
         RtlSecureZeroMemory(&g_ctx, sizeof(g_ctx));
-        g_ctx.IsLocalSystem = IsLocalSystem();
-        if (g_ctx.IsLocalSystem) {
-            g_ctx.IsElevated = TRUE;
-            g_ctx.IsUserInAdminGroup = TRUE;
+
+        ntStatus = NtOpenProcessToken(NtCurrentProcess(), TOKEN_QUERY, &hToken);
+        if (NT_SUCCESS(ntStatus)) {
+
+            ntStatus = supIsLocalSystem(hToken, &g_ctx.IsLocalSystem);
+            if (NT_SUCCESS(ntStatus)) {
+                if (g_ctx.IsLocalSystem) {
+                    g_ctx.IsElevated = TRUE;
+                    g_ctx.IsUserFullAdmin = TRUE;
+                }
+                else {
+                    g_ctx.IsUserFullAdmin = supUserIsFullAdmin(hToken);
+                    if (g_ctx.IsUserFullAdmin) {
+                        g_ctx.IsElevated = supIsClientElevated(NtCurrentProcess());
+                    }
+                }
+            }
+            else {
+                supShowNtStatus("[!] Failed to query process token information\r\n", ntStatus);
+                return;
+            }
+
+            NtClose(hToken);
         }
         else {
-            g_ctx.IsUserInAdminGroup = IsUserInAdminGroup();
-            if (g_ctx.IsUserInAdminGroup) {
-                g_ctx.IsElevated = IsElevated(NULL);
-            }
+            supShowNtStatus("[!] Failed to open self process token\r\n", ntStatus);
+            return;
         }
 
-        if (GetCommandLineOption(PARAM_LOCALSYSTEM, FALSE, NULL, 0, NULL)) {
+        //
+        // -s (System) param.
+        //
+        if (supGetCommandLineOption(PARAM_LOCALSYSTEM, FALSE, NULL, 0, NULL)) {
             if (g_ctx.IsLocalSystem == FALSE) {
-                if (g_ctx.IsUserInAdminGroup == FALSE) {
-                    ConsoleShowMessage("[~] Administrative privileges reqruied for this operation\r\n", 0);
+                if (g_ctx.IsUserFullAdmin == FALSE) {
+                    ConsoleShowMessage("[~] Administrative privileges are required for this operation\r\n", 0);
                     break;
                 }
                 if (g_ctx.IsElevated == FALSE) {
@@ -449,7 +488,7 @@ VOID FuzzInitPhase0(
                     break;
                 }
                 ConsoleShowMessage("[~] Restarting as LocalSystem\r\n", 0);
-                RunAsLocalSystem();
+                supRunAsLocalSystem();
                 break;
             }
             //
@@ -457,19 +496,31 @@ VOID FuzzInitPhase0(
             //
         }
 
-        fuzzParams.ProbeWin32k = GetCommandLineOption(PARAM_WIN32K, FALSE, NULL, 0, NULL);
-        fuzzParams.EnableLog = GetCommandLineOption(PARAM_LOG, FALSE, NULL, 0, NULL);
-        if (fuzzParams.EnableLog) {
+        //
+        // -win32k param.
+        //
+        fuzzParams.ProbeWin32k = supGetCommandLineOption(PARAM_WIN32K, FALSE, NULL, 0, NULL);
+
+        //
+        // -log param.
+        //
+        fuzzParams.LogEnabled = supGetCommandLineOption(PARAM_LOG, FALSE, NULL, 0, NULL);
+        if (fuzzParams.LogEnabled) {
 
             _strcpy(fuzzParams.szLogDeviceOrFile, DEFAULT_LOG_PORT);
             fuzzParams.LogToFile = FALSE;
 
             //
-            // Check log port name.
+            // Check log port name (-pname).
             //
             rLen = 0;
             RtlSecureZeroMemory(szTextBuf, sizeof(szTextBuf));
-            if (GetCommandLineOption(PARAM_LOGPORT, TRUE, szTextBuf, sizeof(szTextBuf) / sizeof(TCHAR), &rLen)) {
+            if (supGetCommandLineOption(PARAM_LOGPORT,
+                TRUE, 
+                szTextBuf, 
+                RTL_NUMBER_OF(szTextBuf), 
+                &rLen)) 
+            {
                 if (rLen) {
                     _strcpy(fuzzParams.szLogDeviceOrFile, szTextBuf);
                 }
@@ -477,11 +528,16 @@ VOID FuzzInitPhase0(
             else {
 
                 //
-                // Check log file name.
+                // Check log file name (-ofile).
                 //
                 rLen = 0;
                 RtlSecureZeroMemory(szTextBuf, sizeof(szTextBuf));
-                if (GetCommandLineOption(PARAM_LOGFILE, TRUE, szTextBuf, sizeof(szTextBuf) / sizeof(TCHAR), &rLen)) {
+                if (supGetCommandLineOption(PARAM_LOGFILE,
+                    TRUE, 
+                    szTextBuf, 
+                    RTL_NUMBER_OF(szTextBuf),
+                    &rLen)) 
+                {
                     if (rLen) {
                         _strcpy(fuzzParams.szLogDeviceOrFile, szTextBuf);
                     }
@@ -494,15 +550,45 @@ VOID FuzzInitPhase0(
             }
         }
 
+        //
+        // -call (SyscallId) param.
+        //
         RtlSecureZeroMemory(szTextBuf, sizeof(szTextBuf));
-        if (GetCommandLineOption(PARAM_SYSCALL, TRUE, szTextBuf, sizeof(szTextBuf) / sizeof(TCHAR), NULL))
+        if (supGetCommandLineOption(PARAM_SYSCALL,
+            TRUE, 
+            szTextBuf, 
+            RTL_NUMBER_OF(szTextBuf), 
+            NULL))
         {
             fuzzParams.ProbeSingleSyscall = TRUE;
-            fuzzParams.SingleSyscallId = _strtoul(szTextBuf);
+            fuzzParams.u1.SingleSyscallId = _strtoul(szTextBuf);
         }
 
+        if (fuzzParams.ProbeSingleSyscall == FALSE) {
+            //
+            // -start (SyscallId) param.
+            //
+            RtlSecureZeroMemory(szTextBuf, sizeof(szTextBuf));
+            if (supGetCommandLineOption(PARAM_SYSCALL_START,
+                TRUE,
+                szTextBuf,
+                RTL_NUMBER_OF(szTextBuf),
+                NULL))
+            {
+                fuzzParams.ProbeFromSyscallId = TRUE;
+                fuzzParams.u1.StartingSyscallId = _strtoul(szTextBuf);
+            }
+        }
+
+        //
+        // -pc (PassCount) param.
+        //
         RtlSecureZeroMemory(szTextBuf, sizeof(szTextBuf));
-        if (GetCommandLineOption(PARAM_PASSCOUNT, TRUE, szTextBuf, sizeof(szTextBuf) / sizeof(TCHAR), NULL))
+        if (supGetCommandLineOption(PARAM_PASSCOUNT,
+            TRUE, 
+            szTextBuf, 
+            RTL_NUMBER_OF(szTextBuf), 
+            NULL))
         {
             fuzzParams.SyscallPassCount = strtou64(szTextBuf);
         }
@@ -515,8 +601,15 @@ VOID FuzzInitPhase0(
             break;
         }
 
+        //
+        // -wt (WaitTimeout) param.
+        //
         RtlSecureZeroMemory(szTextBuf, sizeof(szTextBuf));
-        if (GetCommandLineOption(PARAM_WAITTIMEOUT, TRUE, szTextBuf, sizeof(szTextBuf) / sizeof(TCHAR), NULL))
+        if (supGetCommandLineOption(PARAM_WAITTIMEOUT,
+            TRUE, 
+            szTextBuf, 
+            RTL_NUMBER_OF(szTextBuf),
+            NULL))
         {
             fuzzParams.ThreadWaitTimeout = _strtoul(szTextBuf);
         }
@@ -554,7 +647,7 @@ UINT NtCall64Main()
 
         do {
 
-            if (GetCommandLineOption(PARAM_HELP, FALSE, NULL, 0, NULL)) {
+            if (supGetCommandLineOption(PARAM_HELP, FALSE, NULL, 0, NULL)) {
                 ConsoleShowMessage(T_HELP, 0);
                 break;
             }

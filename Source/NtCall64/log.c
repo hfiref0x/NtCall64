@@ -27,15 +27,15 @@
 * Open port/file for logging.
 *
 */
-BOOL FuzzOpenLog(
+BOOLEAN FuzzOpenLog(
     _In_ LPWSTR LogDeviceFileName,
     _In_ PNTCALL_LOG_PARAMS LogParams
 )
 {
-    HANDLE	hFile;
-    CHAR	szWelcome[128];
-    DWORD	bytesIO;
-    DWORD   openFlags = OPEN_EXISTING;
+    HANDLE hFile;
+    CHAR szWelcome[128];
+    DWORD bytesIO;
+    DWORD openFlags = OPEN_EXISTING;
 
     if (LogParams->LogToFile) openFlags = CREATE_ALWAYS; //always overwrite existing log file.
 

@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016 - 2022
+*  (C) COPYRIGHT AUTHORS, 2016 - 2023
 *
-*  TITLE:       UTIL.C
+*  TITLE:       SUP.C
 *
-*  VERSION:     1.36
+*  VERSION:     1.37
 *
-*  DATE:        04 Sep 2022
+*  DATE:        04 Aug 2023
 *
 *  Support routines.
 *
@@ -18,64 +18,6 @@
 *******************************************************************************/
 
 #include "global.h"
-
-/*
-* GetImageVersionInfo
-*
-* Purpose:
-*
-* Return version numbers from version info.
-*
-*/
-BOOL GetImageVersionInfo(
-    _In_ LPWSTR lpFileName,
-    _Out_opt_ ULONG *MajorVersion,
-    _Out_opt_ ULONG *MinorVersion,
-    _Out_opt_ ULONG *Build,
-    _Out_opt_ ULONG *Revision
-)
-{
-    BOOL bResult = FALSE;
-    DWORD dwHandle, dwSize;
-    PVOID vinfo = NULL;
-    UINT Length;
-    VS_FIXEDFILEINFO *pFileInfo;
-
-    //
-    // Assume failure.
-    //
-    if (MajorVersion)
-        *MajorVersion = 0;
-    if (MinorVersion)
-        *MinorVersion = 0;
-    if (Build)
-        *Build = 0;
-    if (Revision)
-        *Revision = 0;
-
-    dwHandle = 0;
-    dwSize = GetFileVersionInfoSize(lpFileName, &dwHandle);
-    if (dwSize) {
-        vinfo = HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, dwSize);
-        if (vinfo) {
-            if (GetFileVersionInfo(lpFileName, 0, dwSize, vinfo)) {
-                bResult = VerQueryValue(vinfo, TEXT("\\"), (LPVOID *)&pFileInfo, (PUINT)&Length);
-                if (bResult) {
-                    if (MajorVersion)
-                        *MajorVersion = HIWORD(pFileInfo->dwFileVersionMS);
-                    if (MinorVersion)
-                        *MinorVersion = LOWORD(pFileInfo->dwFileVersionMS);
-                    if (Build)
-                        *Build = HIWORD(pFileInfo->dwFileVersionLS);
-                    if (Revision)
-                        *Revision = LOWORD(pFileInfo->dwFileVersionLS);
-                }
-            }
-            HeapFree(GetProcessHeap(), 0, vinfo);
-        }
-    }
-    return bResult;
-}
 
 VOID ConsoleInit(
     VOID)
@@ -153,40 +95,44 @@ VOID ConsoleShowMessage(
 }
 
 /*
-* GetCommandLineOption
+* supGetCommandLineOption
 *
 * Purpose:
 *
 * Parse command line options.
 *
 */
-BOOL GetCommandLineOption(
-    _In_ LPCTSTR OptionName,
-    _In_ BOOL IsParametric,
-    _Out_writes_opt_z_(ValueSize) LPTSTR OptionValue,
+BOOLEAN supGetCommandLineOption(
+    _In_ LPCWSTR OptionName,
+    _In_ BOOLEAN IsParametric,
+    _Out_writes_opt_z_(ValueSize) LPWSTR OptionValue,
     _In_ ULONG ValueSize,
     _Out_opt_ PULONG ParamLength
 )
 {
-    BOOL    bResult;
-    LPTSTR	cmdline = GetCommandLine();
-    TCHAR   Param[MAX_PATH + 1];
-    ULONG   rlen;
-    int		i = 0;
+    BOOLEAN bResult;
+    LPWSTR cmdline = GetCommandLine();
+    WCHAR szParam[MAX_PATH + 1];
+    ULONG rlen;
+    INT	i = 0;
 
     if (ParamLength)
         *ParamLength = 0;
 
-    RtlSecureZeroMemory(Param, sizeof(Param));
-    while (GetCommandLineParam(cmdline, i, Param, MAX_PATH, &rlen))
+    RtlSecureZeroMemory(szParam, sizeof(szParam));
+    while (GetCommandLineParam(
+        cmdline, 
+        i, 
+        szParam, 
+        MAX_PATH, 
+        &rlen)) 
     {
         if (rlen == 0)
             break;
 
-        if (_strcmp(Param, OptionName) == 0)
-        {
+        if (_strcmp(szParam, OptionName) == 0) {
             if (IsParametric) {
-                bResult = GetCommandLineParam(cmdline, i + 1, OptionValue, ValueSize, &rlen);
+                bResult = (BOOLEAN)GetCommandLineParam(cmdline, i + 1, OptionValue, ValueSize, &rlen);
                 if (ParamLength)
                     *ParamLength = rlen;
                 return bResult;
@@ -200,93 +146,91 @@ BOOL GetCommandLineOption(
     return FALSE;
 }
 
-
 /*
-* IsUserInAdminGroup
+* supUserIsFullAdmin
 *
 * Purpose:
 *
-* Returns TRUE if current user is in admin group.
+* Tests if the current user is admin with full access token.
 *
 */
-BOOLEAN IsUserInAdminGroup(
-    VOID
+BOOLEAN supUserIsFullAdmin(
+    _In_ HANDLE hToken
 )
 {
     BOOLEAN bResult = FALSE;
-    HANDLE hToken;
+    NTSTATUS status;
+    DWORD i, Attributes;
+    ULONG ReturnLength = 0;
 
-    ULONG returnLength, i;
+    PTOKEN_GROUPS pTkGroups;
 
-    PSID pSid = NULL;
+    SID_IDENTIFIER_AUTHORITY ntAuthority = SECURITY_NT_AUTHORITY;
+    PSID adminGroup = NULL;
 
-    PTOKEN_GROUPS ptg = NULL;
+    do {
+        if (!NT_SUCCESS(RtlAllocateAndInitializeSid(
+            &ntAuthority,
+            2,
+            SECURITY_BUILTIN_DOMAIN_RID,
+            DOMAIN_ALIAS_RID_ADMINS,
+            0, 0, 0, 0, 0, 0,
+            &adminGroup)))
+        {
+            break;
+        }
 
-    SID_IDENTIFIER_AUTHORITY NtAuthority = SECURITY_NT_AUTHORITY;
+        status = NtQueryInformationToken(hToken, TokenGroups, NULL, 0, &ReturnLength);
+        if (status != STATUS_BUFFER_TOO_SMALL)
+            break;
 
-    if (OpenProcessToken(GetCurrentProcess(), TOKEN_QUERY, &hToken)) {
+        pTkGroups = (PTOKEN_GROUPS)supHeapAlloc((SIZE_T)ReturnLength);
+        if (pTkGroups == NULL)
+            break;
 
-        GetTokenInformation(hToken, TokenGroups, NULL, 0, &returnLength);
-
-        ptg = (PTOKEN_GROUPS)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, (SIZE_T)returnLength);
-        if (ptg) {
-
-            if (GetTokenInformation(hToken,
-                TokenGroups,
-                ptg,
-                returnLength,
-                &returnLength))
-            {
-                if (AllocateAndInitializeSid(&NtAuthority,
-                    2,
-                    SECURITY_BUILTIN_DOMAIN_RID,
-                    DOMAIN_ALIAS_RID_ADMINS,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    0,
-                    &pSid))
-                {
-                    for (i = 0; i < ptg->GroupCount; i++) {
-                        if (EqualSid(pSid, ptg->Groups[i].Sid)) {
+        status = NtQueryInformationToken(hToken, TokenGroups, pTkGroups, ReturnLength, &ReturnLength);
+        if (NT_SUCCESS(status)) {
+            if (pTkGroups->GroupCount > 0)
+                for (i = 0; i < pTkGroups->GroupCount; i++) {
+                    Attributes = pTkGroups->Groups[i].Attributes;
+                    if (RtlEqualSid(adminGroup, pTkGroups->Groups[i].Sid))
+                        if (
+                            (Attributes & SE_GROUP_ENABLED) &&
+                            (!(Attributes & SE_GROUP_USE_FOR_DENY_ONLY))
+                            )
+                        {
                             bResult = TRUE;
                             break;
                         }
-                    }
-
-                    FreeSid(pSid);
                 }
-            }
-
-            HeapFree(GetProcessHeap(), 0, ptg);
         }
-        CloseHandle(hToken);
+        supHeapFree(pTkGroups);
+
+    } while (FALSE);
+
+    if (adminGroup != NULL) {
+        RtlFreeSid(adminGroup);
     }
+
     return bResult;
 }
 
 /*
-* IsElevated
+* supIsClientElevated
 *
 * Purpose:
 *
 * Returns TRUE if process runs elevated.
 *
 */
-BOOL IsElevated(
-    _In_opt_ HANDLE ProcessHandle
+BOOLEAN supIsClientElevated(
+    _In_ HANDLE ProcessHandle
 )
 {
     HANDLE hToken = NULL, processHandle = ProcessHandle;
     NTSTATUS Status;
     ULONG BytesRead = 0;
     TOKEN_ELEVATION te;
-
-    if (ProcessHandle == NULL) {
-        processHandle = GetCurrentProcess();
-    }
 
     te.TokenIsElevated = 0;
 
@@ -303,76 +247,44 @@ BOOL IsElevated(
 }
 
 /*
-* PELoaderGetProcNameBySDTIndex
+* supLdrGetProcNameBySDTIndex
 *
 * Purpose:
 *
 * Return name of service from ntdll by given syscall id.
 *
 */
-PCHAR PELoaderGetProcNameBySDTIndex(
-    _In_ ULONG_PTR MappedImageBase,
+PCHAR supLdrGetProcNameBySDTIndex(
+    _In_ PVOID ModuleBase,
     _In_ ULONG SDTIndex
 )
 {
+    PIMAGE_EXPORT_DIRECTORY pImageExportDirectory;
+    PULONG nameTableBase;
+    PUSHORT nameOrdinalTableBase;
+    PULONG funcTable;
+    PBYTE pfn;
+    ULONG c, exportSize;
 
-    PIMAGE_NT_HEADERS       nthdr = RtlImageNtHeader((PVOID)MappedImageBase);
-    PIMAGE_EXPORT_DIRECTORY ExportDirectory;
+    pImageExportDirectory = (PIMAGE_EXPORT_DIRECTORY)RtlImageDirectoryEntryToData(ModuleBase,
+        TRUE, IMAGE_DIRECTORY_ENTRY_EXPORT, &exportSize);
 
-    ULONG_PTR   ExportDirectoryOffset;
-    PULONG      NameTableBase;
-    PUSHORT     NameOrdinalTableBase;
-    PULONG      Addr;
-    PBYTE       pfn;
-    ULONG       c;
+    if (pImageExportDirectory) {
 
-    ExportDirectoryOffset =
-        nthdr->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
+        nameTableBase = (PDWORD)RtlOffsetToPointer(ModuleBase, pImageExportDirectory->AddressOfNames);
+        nameOrdinalTableBase = (PUSHORT)RtlOffsetToPointer(ModuleBase, pImageExportDirectory->AddressOfNameOrdinals);
+        funcTable = (PDWORD)RtlOffsetToPointer(ModuleBase, pImageExportDirectory->AddressOfFunctions);
 
-    if (ExportDirectoryOffset == 0)
-        return NULL;
+        for (c = 0; c < pImageExportDirectory->NumberOfNames; c++) {
+            pfn = (PBYTE)RtlOffsetToPointer(ModuleBase, funcTable[nameOrdinalTableBase[c]]);
+            if (*((PULONG)pfn) == 0xb8d18b4c)
+                if (*((PULONG)(pfn + 4)) == SDTIndex)
+                    return (PCHAR)RtlOffsetToPointer(ModuleBase, nameTableBase[c]);
+        }
 
-    ExportDirectory = (PIMAGE_EXPORT_DIRECTORY)(MappedImageBase + ExportDirectoryOffset);
-    NameTableBase = (PULONG)(MappedImageBase + (ULONG)ExportDirectory->AddressOfNames);
-    NameOrdinalTableBase = (PUSHORT)(MappedImageBase + (ULONG)ExportDirectory->AddressOfNameOrdinals);
-    Addr = (PULONG)(MappedImageBase + (ULONG)ExportDirectory->AddressOfFunctions);
-
-    for (c = 0; c < ExportDirectory->NumberOfNames; c++) {
-        pfn = (PBYTE)(MappedImageBase + Addr[NameOrdinalTableBase[c]]);
-        if (*((PULONG)pfn) == 0xb8d18b4c)
-            if (*((PULONG)(pfn + 4)) == SDTIndex)
-                return (PCHAR)(MappedImageBase + NameTableBase[c]);
     }
 
     return NULL;
-}
-
-/*
-* supHeapAlloc
-*
-* Purpose:
-*
-* Wrapper for RtlAllocateHeap.
-*
-*/
-FORCEINLINE PVOID supHeapAlloc(
-    _In_ SIZE_T Size)
-{
-    return RtlAllocateHeap(NtCurrentPeb()->ProcessHeap, HEAP_ZERO_MEMORY, Size);
-}
-
-/*
-* supHeapFree
-*
-* Purpose:
-*
-* Wrapper for RtlFreeHeap.
-*
-*/
-FORCEINLINE BOOL supHeapFree(
-    _In_ PVOID Memory)
-{
-    return RtlFreeHeap(NtCurrentPeb()->ProcessHeap, 0, Memory);
 }
 
 /*
@@ -495,9 +407,9 @@ NTSTATUS supIsLocalSystem(
     _In_ HANDLE hToken,
     _Out_ PBOOLEAN pbResult)
 {
-    BOOLEAN                  bResult = FALSE;
-    NTSTATUS                 status = STATUS_UNSUCCESSFUL;
-    PSID                     SystemSid = NULL, TokenSid = NULL;
+    BOOLEAN bResult = FALSE;
+    NTSTATUS status = STATUS_UNSUCCESSFUL;
+    PSID SystemSid = NULL, TokenSid = NULL;
     SID_IDENTIFIER_AUTHORITY NtAuth = SECURITY_NT_AUTHORITY;
 
     TokenSid = supQueryTokenUserSid(hToken);
@@ -701,7 +613,7 @@ PVOID supGetSystemInfo(
         &returnedLength)) == STATUS_INFO_LENGTH_MISMATCH)
     {
         supHeapFree(buffer);
-        bufferSize *= 2;
+        bufferSize <<= 1;
 
         if (bufferSize > SI_MAX_BUFFER_LENGTH)
             return NULL;
@@ -734,11 +646,10 @@ BOOL supEnablePrivilege(
     _In_ BOOL fEnable
 )
 {
-    BOOL             bResult = FALSE;
-    NTSTATUS         status;
-    ULONG            dummy;
-    HANDLE           hToken;
-    TOKEN_PRIVILEGES TokenPrivileges;
+    NTSTATUS status;
+    ULONG dummy;
+    HANDLE hToken;
+    TOKEN_PRIVILEGES tkPrivs;
 
     status = NtOpenProcessToken(
         NtCurrentProcess(),
@@ -746,25 +657,24 @@ BOOL supEnablePrivilege(
         &hToken);
 
     if (!NT_SUCCESS(status)) {
-        return bResult;
+        return FALSE;
     }
 
-    TokenPrivileges.PrivilegeCount = 1;
-    TokenPrivileges.Privileges[0].Luid.LowPart = PrivilegeName;
-    TokenPrivileges.Privileges[0].Luid.HighPart = 0;
-    TokenPrivileges.Privileges[0].Attributes = (fEnable) ? SE_PRIVILEGE_ENABLED : 0;
-    status = NtAdjustPrivilegesToken(hToken, FALSE, &TokenPrivileges,
+    tkPrivs.PrivilegeCount = 1;
+    tkPrivs.Privileges[0].Luid.LowPart = PrivilegeName;
+    tkPrivs.Privileges[0].Luid.HighPart = 0;
+    tkPrivs.Privileges[0].Attributes = (fEnable) ? SE_PRIVILEGE_ENABLED : 0;
+    status = NtAdjustPrivilegesToken(hToken, FALSE, &tkPrivs,
         sizeof(TOKEN_PRIVILEGES), (PTOKEN_PRIVILEGES)NULL, (PULONG)&dummy);
     if (status == STATUS_NOT_ALL_ASSIGNED) {
         status = STATUS_PRIVILEGE_NOT_HELD;
     }
-    bResult = NT_SUCCESS(status);
     NtClose(hToken);
-    return bResult;
+    return NT_SUCCESS(status);
 }
 
 /*
-* RunAsLocalSystem
+* supRunAsLocalSystem
 *
 * Purpose:
 *
@@ -773,7 +683,7 @@ BOOL supEnablePrivilege(
 * Note: Elevated instance required.
 *
 */
-VOID RunAsLocalSystem(
+VOID supRunAsLocalSystem(
     VOID
 )
 {
@@ -1011,25 +921,168 @@ HANDLE supGetCurrentProcessToken(
 }
 
 /*
-* IsLocalSystem
+* supMapImageNoExecute
 *
 * Purpose:
 *
-* Returns TRUE if current user is LocalSystem.
+* Map image with SEC_IMAGE_NO_EXECUTE.
 *
 */
-BOOLEAN IsLocalSystem(
-    VOID
+NTSTATUS supMapImageNoExecute(
+    _In_ PUNICODE_STRING ImagePath,
+    _Out_ PVOID* BaseAddress
 )
 {
-    BOOLEAN bResult = FALSE;
-    HANDLE hToken;
+    NTSTATUS ntStatus = STATUS_UNSUCCESSFUL;
+    SIZE_T fileSize = 0;
+    HANDLE hFile = NULL, hSection = NULL;
+    OBJECT_ATTRIBUTES obja;
+    IO_STATUS_BLOCK iost;
+    LARGE_INTEGER li;
 
-    hToken = supGetCurrentProcessToken();
-    if (hToken) {
-        supIsLocalSystem(hToken, &bResult);
-        NtClose(hToken);
+    *BaseAddress = NULL;
+
+    do {
+
+        InitializeObjectAttributes(&obja, ImagePath,
+            OBJ_CASE_INSENSITIVE, NULL, NULL);
+
+        RtlSecureZeroMemory(&iost, sizeof(iost));
+        ntStatus = NtCreateFile(&hFile,
+            SYNCHRONIZE | FILE_READ_DATA,
+            &obja,
+            &iost,
+            NULL,
+            0,
+            FILE_SHARE_READ,
+            FILE_OPEN,
+            FILE_SYNCHRONOUS_IO_NONALERT | FILE_NON_DIRECTORY_FILE,
+            NULL,
+            0);
+
+        if (!NT_SUCCESS(ntStatus))
+            break;
+
+        obja.ObjectName = NULL;
+
+        ntStatus = NtCreateSection(&hSection,
+            SECTION_MAP_READ,
+            &obja,
+            NULL,
+            PAGE_READONLY,
+            SEC_IMAGE_NO_EXECUTE,
+            hFile);
+
+        if (!NT_SUCCESS(ntStatus))
+            break;
+
+        li.QuadPart = 0;
+
+        ntStatus = NtMapViewOfSection(hSection,
+            NtCurrentProcess(),
+            BaseAddress,
+            0,
+            0,
+            &li,
+            &fileSize,
+            ViewShare,
+            0,
+            PAGE_READONLY);
+
+        if (!NT_SUCCESS(ntStatus))
+            break;
+
+    } while (FALSE);
+
+    if (hFile) NtClose(hFile);
+    if (hSection) NtClose(hSection);
+    return ntStatus;
+}
+
+/*
+* supLdrGetProcAddressEx
+*
+* Purpose:
+*
+* Simplified GetProcAddress reimplementation.
+*
+*/
+LPVOID supLdrGetProcAddressEx(
+    _In_ LPVOID ImageBase,
+    _In_ LPCSTR RoutineName
+)
+{
+    PIMAGE_EXPORT_DIRECTORY ExportDirectory = NULL;
+    USHORT OrdinalNumber;
+    PULONG NameTableBase;
+    PUSHORT NameOrdinalTableBase;
+    PULONG Addr;
+    LONG Result;
+    ULONG High, Low, Middle = 0;
+
+    union {
+        PIMAGE_NT_HEADERS64 nt64;
+        PIMAGE_NT_HEADERS32 nt32;
+        PIMAGE_NT_HEADERS nt;
+    } NtHeaders;
+
+    if (!NT_SUCCESS(RtlImageNtHeaderEx(RTL_IMAGE_NT_HEADER_EX_FLAG_NO_RANGE_CHECK,
+        ImageBase, 0, &NtHeaders.nt)))
+    {
+        return NULL;
     }
 
-    return bResult;
+    if (NtHeaders.nt == NULL) {
+        return NULL;
+    }
+
+    if (NtHeaders.nt->FileHeader.Machine == IMAGE_FILE_MACHINE_AMD64) {
+
+        ExportDirectory = (PIMAGE_EXPORT_DIRECTORY)RtlOffsetToPointer(ImageBase,
+            NtHeaders.nt64->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
+
+    }
+    else if (NtHeaders.nt->FileHeader.Machine == IMAGE_FILE_MACHINE_I386) {
+
+        ExportDirectory = (PIMAGE_EXPORT_DIRECTORY)RtlOffsetToPointer(ImageBase,
+            NtHeaders.nt32->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
+    }
+    else
+    {
+        return NULL;
+    }
+
+    NameTableBase = (PULONG)RtlOffsetToPointer(ImageBase, (ULONG)ExportDirectory->AddressOfNames);
+    NameOrdinalTableBase = (PUSHORT)RtlOffsetToPointer(ImageBase, (ULONG)ExportDirectory->AddressOfNameOrdinals);
+    Low = 0;
+    High = ExportDirectory->NumberOfNames - 1;
+    while (High >= Low) {
+
+        Middle = (Low + High) >> 1;
+
+        Result = _strcmp_a(
+            RoutineName,
+            (char*)RtlOffsetToPointer(ImageBase, NameTableBase[Middle]));
+
+        if (Result < 0) {
+            High = Middle - 1;
+        }
+        else {
+            if (Result > 0) {
+                Low = Middle + 1;
+            }
+            else {
+                break;
+            }
+        }
+    }
+    if (High < Low)
+        return NULL;
+
+    OrdinalNumber = NameOrdinalTableBase[Middle];
+    if ((ULONG)OrdinalNumber >= ExportDirectory->NumberOfFunctions)
+        return NULL;
+
+    Addr = (PULONG)RtlOffsetToPointer(ImageBase, (ULONG)ExportDirectory->AddressOfFunctions);
+    return (LPVOID)RtlOffsetToPointer(ImageBase, Addr[OrdinalNumber]);
 }

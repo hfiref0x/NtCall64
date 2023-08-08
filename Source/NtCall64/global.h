@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016 - 2021
+*  (C) COPYRIGHT AUTHORS, 2016 - 2023
 *
 *  TITLE:       GLOBAL.H
 *
-*  VERSION:     1.35
+*  VERSION:     1.37
 *
-*  DATE:        21 Feb 2021
+*  DATE:        04 Aug 2023
 *
 *  Global definitions.
 *
@@ -41,12 +41,13 @@
 #include <ntstatus.h>
 #include <intrin.h>
 #include "ntos.h"
+#include "ntbuilds.h"
 #include "hde\hde64.h"
 #include "minirtl\minirtl.h"
 #include "minirtl\_filename.h"
 #include "minirtl\cmdline.h"
 #include "blacklist.h"
-#include "util.h"
+#include "sup.h"
 #include "log.h"
 
 #pragma comment(lib, "Version.lib")
@@ -66,29 +67,37 @@ typedef struct _CALL_PARAM {
 } CALL_PARAM, *PCALL_PARAM;
 
 typedef struct _NTCALL_CONTEXT {
-    BOOL LogEnabled;
-    BOOL ProbeWin32k;
-    BOOL ProbeSingleSyscall;
-    BOOL IsUserInAdminGroup;
-    BOOL IsLocalSystem;
-    BOOL IsElevated;
-    ULONG SingleSyscallId;
+    BOOLEAN LogEnabled;
+    BOOLEAN ProbeWin32k;
+    BOOLEAN ProbeSingleSyscall;
+    BOOLEAN ProbeFromSyscallId;
+    BOOLEAN IsUserFullAdmin;
+    BOOLEAN IsLocalSystem;
+    BOOLEAN IsElevated;
+    union {
+        ULONG SingleSyscallId;
+        ULONG StartingSyscallId;
+    } u1;
     ULONG ThreadWaitTimeout;
     ULONG64 SyscallPassCount;
-    ULONG_PTR hNtdll;
-    ULONG_PTR SystemImageBase;
-    CHAR **Win32pServiceTableNames;
+    PVOID NtdllBase;
+    PVOID SystemModuleBase;
+    PCHAR *Win32pServiceTableNames;
     RAW_SERVICE_TABLE ServiceTable;
     BLACKLIST BlackList;
-    WCHAR szSystemDirectory[MAX_PATH + 1];
+    RTL_OSVERSIONINFOW OsVersion;
 } NTCALL_CONTEXT, *PNTCALL_CONTEXT;
 
 typedef struct _NTCALL_FUZZ_PARAMS {
-    BOOL EnableLog;
-    BOOL LogToFile;
-    BOOL ProbeWin32k;
-    BOOL ProbeSingleSyscall;
-    ULONG SingleSyscallId;
+    BOOLEAN LogEnabled;
+    BOOLEAN LogToFile;
+    BOOLEAN ProbeWin32k;
+    BOOLEAN ProbeSingleSyscall;
+    BOOLEAN ProbeFromSyscallId;
+    union {
+        ULONG SingleSyscallId;
+        ULONG StartingSyscallId;
+    } u1;
     ULONG ThreadWaitTimeout;
     ULONG64 SyscallPassCount;
     WCHAR szLogDeviceOrFile[MAX_PATH + 1];

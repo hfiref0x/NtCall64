@@ -158,7 +158,7 @@
     <ClCompile Include="minirtl\_strlen.c" />
     <ClCompile Include="minirtl\_strncmp.c" />
     <ClCompile Include="minirtl\_strncpy.c" />
-    <ClCompile Include="util.c" />
+    <ClCompile Include="sup.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="blacklist.h" />
@@ -172,10 +172,11 @@
     <ClInclude Include="minirtl\minirtl.h" />
     <ClInclude Include="minirtl\rtltypes.h" />
     <ClInclude Include="minirtl\_filename.h" />
+    <ClInclude Include="ntbuilds.h" />
     <ClInclude Include="ntos.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="tables.h" />
-    <ClInclude Include="util.h" />
+    <ClInclude Include="sup.h" />
   </ItemGroup>
   <ItemGroup>
     <MASM Include="syscall.asm">

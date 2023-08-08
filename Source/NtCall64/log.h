@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016 - 2021
+*  (C) COPYRIGHT AUTHORS, 2016 - 2023
 *
 *  TITLE:       LOG.H
 *
-*  VERSION:     1.35
+*  VERSION:     1.37
 *
-*  DATE:        21 Feb 2021
+*  DATE:        04 Aug 2023
 *
 *  Log support header file.
 *
@@ -24,7 +24,7 @@ typedef struct _NTCALL_LOG_PARAMS {
     HANDLE LogHandle;
 } NTCALL_LOG_PARAMS, * PNTCALL_LOG_PARAMS;
 
-BOOL FuzzOpenLog(
+BOOLEAN FuzzOpenLog(
     _In_ LPWSTR LogDeviceFileName,
     _In_ PNTCALL_LOG_PARAMS LogParams);
 

@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016 - 2021
+*  (C) COPYRIGHT AUTHORS, 2016 - 2023
 *
 *  TITLE:       FUZZ.C
 *
-*  VERSION:     1.35
+*  VERSION:     1.37
 *
-*  DATE:        21 Feb 2021
+*  DATE:        04 Aug 2023
 *
 *  Fuzzing routines.
 *
@@ -23,10 +23,19 @@
 #ifdef __cplusplus 
 extern "C" {
 #endif
-    NTSTATUS ntSyscallGate(ULONG ServiceId, ULONG ArgumentCount, ULONG_PTR *Arguments);
+    NTSTATUS ntSyscallGate(ULONG ServiceId, ULONG ArgumentCount, ULONG_PTR* Arguments);
 #ifdef __cplusplus
 }
 #endif
+
+#define FUZZDATA_COUNT 13
+const ULONG_PTR FuzzData[FUZZDATA_COUNT] = {
+    0x0000000000000000, 0x000000000000ffff, 0x000000000000fffe, 0x00007ffffffeffff,
+    0x00007ffffffefffe, 0x00007fffffffffff, 0x00007ffffffffffe, 0x0000800000000000,
+    0x8000000000000000, 0xffff080000000000, 0xfffff80000000000, 0xffff800000000000,
+    0xffff800000000001
+};
+
 
 /*
 * FuzzEnumWin32uServices
@@ -36,69 +45,62 @@ extern "C" {
 * Enumerate win32u module services to the table.
 *
 */
-_Success_(return != 0)
 ULONG FuzzEnumWin32uServices(
     _In_ HANDLE HeapHandle,
-    _In_ LPVOID Module,
-    _Out_ PWIN32_SHADOWTABLE * Table
+    _In_ LPVOID ModuleBase,
+    _Inout_ PWIN32_SHADOWTABLE* Table
 )
 {
-    PIMAGE_NT_HEADERS           NtHeaders;
-    PIMAGE_EXPORT_DIRECTORY		exp;
-    PDWORD						FnPtrTable, NameTable;
-    PWORD						NameOrdTable;
-    ULONG_PTR					fnptr, exprva, expsize;
-    ULONG						c, n, result;
-    PWIN32_SHADOWTABLE			NewEntry;
+    ULONG i, j, result = 0, exportSize;
+    PBYTE fnptr;
+    PDWORD funcTable, nameTableBase;
+    PWORD nameOrdinalTableBase;
+    PWIN32_SHADOWTABLE w32kTableEntry;
+    PIMAGE_EXPORT_DIRECTORY pImageExportDirectory;
 
-    NtHeaders = RtlImageNtHeader(Module);
-    if (NtHeaders->OptionalHeader.NumberOfRvaAndSizes <= IMAGE_DIRECTORY_ENTRY_EXPORT)
-        return 0;
+    pImageExportDirectory = (PIMAGE_EXPORT_DIRECTORY)RtlImageDirectoryEntryToData(ModuleBase,
+        TRUE, IMAGE_DIRECTORY_ENTRY_EXPORT, &exportSize);
 
-    exprva = NtHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
-    if (exprva == 0)
-        return 0;
+    if (pImageExportDirectory) {
 
-    expsize = NtHeaders->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].Size;
+        nameTableBase = (PDWORD)RtlOffsetToPointer(ModuleBase, pImageExportDirectory->AddressOfNames);
+        nameOrdinalTableBase = (PUSHORT)RtlOffsetToPointer(ModuleBase, pImageExportDirectory->AddressOfNameOrdinals);
+        funcTable = (PDWORD)RtlOffsetToPointer(ModuleBase, pImageExportDirectory->AddressOfFunctions);
 
-    exp = (PIMAGE_EXPORT_DIRECTORY)((ULONG_PTR)Module + exprva);
-    FnPtrTable = (PDWORD)((ULONG_PTR)Module + exp->AddressOfFunctions);
-    NameTable = (PDWORD)((ULONG_PTR)Module + exp->AddressOfNames);
-    NameOrdTable = (PWORD)((ULONG_PTR)Module + exp->AddressOfNameOrdinals);
+        result = 0;
 
-    result = 0;
+        for (i = 0; i < pImageExportDirectory->NumberOfFunctions; ++i) {
 
-    for (c = 0; c < exp->NumberOfFunctions; ++c)
-    {
-        fnptr = (ULONG_PTR)Module + FnPtrTable[c];
-        if (*(PDWORD)fnptr != 0xb8d18b4c) //mov r10, rcx; mov eax
-            continue;
+            fnptr = (PBYTE)RtlOffsetToPointer(ModuleBase, funcTable[nameOrdinalTableBase[i]]);
+            if (*(PDWORD)fnptr != 0xb8d18b4c) //mov r10, rcx; mov eax
+                continue;
 
-        NewEntry = (PWIN32_SHADOWTABLE)HeapAlloc(HeapHandle,
-            HEAP_ZERO_MEMORY, sizeof(WIN32_SHADOWTABLE));
+            w32kTableEntry = (PWIN32_SHADOWTABLE)HeapAlloc(HeapHandle,
+                HEAP_ZERO_MEMORY, sizeof(WIN32_SHADOWTABLE));
 
-        if (NewEntry == NULL)
-            break;
-
-        NewEntry->Index = *(PDWORD)(fnptr + 4);
-
-        for (n = 0; n < exp->NumberOfNames; ++n)
-        {
-            if (NameOrdTable[n] == c)
-            {
-                _strncpy_a(&NewEntry->Name[0],
-                    sizeof(NewEntry->Name),
-                    (LPCSTR)((ULONG_PTR)Module + NameTable[n]),
-                    sizeof(NewEntry->Name));
-
+            if (w32kTableEntry == NULL)
                 break;
+
+            w32kTableEntry->Index = *(PDWORD)(fnptr + 4);
+
+            for (j = 0; j < pImageExportDirectory->NumberOfNames; ++j)
+            {
+                if (nameOrdinalTableBase[j] == i)
+                {
+                    _strncpy_a(&w32kTableEntry->Name[0],
+                        sizeof(w32kTableEntry->Name),
+                        (LPCSTR)RtlOffsetToPointer(ModuleBase, nameTableBase[j]),
+                        sizeof(w32kTableEntry->Name));
+
+                    break;
+                }
             }
+
+            ++result;
+
+            *Table = w32kTableEntry;
+            Table = &w32kTableEntry->NextService;
         }
-
-        ++result;
-
-        *Table = NewEntry;
-        Table = &NewEntry->NextService;
     }
 
     return result;
@@ -138,17 +140,18 @@ PCHAR FuzzResolveW32kServiceNameById(
 * Locate KiServiceTable in mapped ntoskrnl copy.
 *
 */
-BOOL FuzzFindKiServiceTable(
-    _In_ ULONG_PTR MappedImageBase,
+BOOLEAN FuzzFindKiServiceTable(
+    _In_ PVOID MappedImageBase,
     _In_ PRAW_SERVICE_TABLE ServiceTable
 )
 {
-    ULONG_PTR             SectionPtr = 0;
-    IMAGE_NT_HEADERS* NtHeaders = RtlImageNtHeader((PVOID)MappedImageBase);
+    ULONG_PTR SectionPtr = 0;
+    PBYTE ptrCode = (PBYTE)MappedImageBase;
+    IMAGE_NT_HEADERS* NtHeaders = RtlImageNtHeader(MappedImageBase);
     IMAGE_SECTION_HEADER* SectionTableEntry;
-    ULONG                 c, p, SectionSize = 0, SectionVA = 0;
+    ULONG c, p, SectionSize = 0, SectionVA = 0;
 
-    const BYTE  KiSystemServiceStartPattern[] = { 0x45, 0x33, 0xC9, 0x44, 0x8B, 0x05 };
+    const BYTE KiSystemServiceStartPattern[] = { 0x45, 0x33, 0xC9, 0x44, 0x8B, 0x05 };
 
     SectionTableEntry = (PIMAGE_SECTION_HEADER)((PCHAR)NtHeaders +
         sizeof(ULONG) +
@@ -164,7 +167,7 @@ BOOL FuzzFindKiServiceTable(
 
             {
                 SectionVA = SectionTableEntry->VirtualAddress;
-                SectionPtr = (ULONG_PTR)(MappedImageBase + SectionVA);
+                SectionPtr = (ULONG_PTR)RtlOffsetToPointer(MappedImageBase, SectionVA);
                 SectionSize = SectionTableEntry->Misc.VirtualSize;
                 break;
             }
@@ -191,14 +194,14 @@ BOOL FuzzFindKiServiceTable(
         return FALSE;
 
     p += 3;
-    c = *((PULONG)(MappedImageBase + p + 3)) + 7 + p;
-    ServiceTable->CountOfEntries = *((PULONG)(MappedImageBase + c));
+    c = *((PULONG)(ptrCode + p + 3)) + 7 + p;
+    ServiceTable->CountOfEntries = *((PULONG)(ptrCode + c));
     p += 7;
-    c = *((PULONG)(MappedImageBase + p + 3)) + 7 + p;
-    ServiceTable->StackArgumentTable = (PBYTE)MappedImageBase + c;
+    c = *((PULONG)(ptrCode + p + 3)) + 7 + p;
+    ServiceTable->StackArgumentTable = (PBYTE)ptrCode + c;
     p += 7;
-    c = *((PULONG)(MappedImageBase + p + 3)) + 7 + p;
-    ServiceTable->ServiceTable = (LPVOID*)(MappedImageBase + c);
+    c = *((PULONG)(ptrCode + p + 3)) + 7 + p;
+    ServiceTable->ServiceTable = (LPVOID*)(ptrCode + c);
 
     return TRUE;
 }
@@ -211,23 +214,23 @@ BOOL FuzzFindKiServiceTable(
 * Locate shadow table info in mapped win32k copy.
 *
 */
-BOOL FuzzFindW32pServiceTable(
-    _In_ HMODULE MappedImageBase,
+BOOLEAN FuzzFindW32pServiceTable(
+    _In_ PVOID MappedImageBase,
     _In_ PRAW_SERVICE_TABLE ServiceTable
 )
 {
     PULONG ServiceLimit;
 
-    ServiceLimit = (ULONG*)GetProcAddress(MappedImageBase, "W32pServiceLimit");
+    ServiceLimit = (ULONG*)supLdrGetProcAddressEx(MappedImageBase, "W32pServiceLimit");
     if (ServiceLimit == NULL)
         return FALSE;
 
     ServiceTable->CountOfEntries = *ServiceLimit;
-    ServiceTable->StackArgumentTable = (PBYTE)GetProcAddress(MappedImageBase, "W32pArgumentTable");
+    ServiceTable->StackArgumentTable = (PBYTE)supLdrGetProcAddressEx(MappedImageBase, "W32pArgumentTable");
     if (ServiceTable->StackArgumentTable == NULL)
         return FALSE;
 
-    ServiceTable->ServiceTable = (LPVOID*)GetProcAddress(MappedImageBase, "W32pServiceTable");
+    ServiceTable->ServiceTable = (LPVOID*)supLdrGetProcAddressEx(MappedImageBase, "W32pServiceTable");
     if (ServiceTable->ServiceTable == NULL)
         return FALSE;
 
@@ -242,23 +245,21 @@ BOOL FuzzFindW32pServiceTable(
 * Fuzzing procedure, building parameters list and using syscall gate.
 *
 */
-void DoSystemCall(
+VOID DoSystemCall(
     _In_ ULONG ServiceId,
     _In_ ULONG ParametersInStack,
     _In_ PVOID LogParams
 )
 {
-    ULONG		c;
-    ULONG_PTR	Arguments[MAX_PARAMETERS];
-    ULONG64     u_rand;
+    ULONG c;
+    ULONG_PTR args[MAX_PARAMETERS];
 
-    RtlSecureZeroMemory(Arguments, sizeof(Arguments));
+    RtlSecureZeroMemory(args, sizeof(args));
 
     ParametersInStack /= 4;
 
     for (c = 0; c < ParametersInStack + 4; c++) {
-        u_rand = __rdtsc();
-        Arguments[c] = fuzzdata[u_rand % SIZEOF_FUZZDATA];
+        args[c] = FuzzData[__rdtsc() % FUZZDATA_COUNT];
     }
 
     if (g_ctx.LogEnabled) {
@@ -266,12 +267,11 @@ void DoSystemCall(
         FuzzLogCallParameters((PNTCALL_LOG_PARAMS)LogParams,
             ServiceId,
             ParametersInStack + 4,
-            (ULONG_PTR*)&Arguments);
+            (ULONG_PTR*)&args);
 
     }
 
-    ntSyscallGate(ServiceId, ParametersInStack + 4, Arguments);
-
+    ntSyscallGate(ServiceId, ParametersInStack + 4, args);
 }
 
 /*
@@ -282,57 +282,56 @@ void DoSystemCall(
 * Build shadow table service names list.
 *
 */
-BOOL FuzzLookupWin32kNames(
-    _In_ LPWSTR ModuleName,
-    _Inout_ NTCALL_CONTEXT *Context
+BOOLEAN FuzzLookupWin32kNames(
+    _Inout_ NTCALL_CONTEXT* Context
 )
 {
-    ULONG                   BuildNumber = 0, i;
-    ULONG_PTR               MappedImageBase = Context->SystemImageBase;
-    PIMAGE_NT_HEADERS       NtHeaders = RtlImageNtHeader((PVOID)MappedImageBase);
-    PRAW_SERVICE_TABLE      ServiceTable = &Context->ServiceTable;
-    ULONG_PTR	            Address;
-    CHAR                  **lpServiceNames;
+    ULONG dwBuildNumber = 0, i;
+    PVOID MappedImageBase = Context->SystemModuleBase;
+    PIMAGE_NT_HEADERS NtHeaders = RtlImageNtHeader((PVOID)MappedImageBase);
+    PRAW_SERVICE_TABLE ServiceTable = &Context->ServiceTable;
+    ULONG_PTR Address;
+    PCHAR* lpServiceNames;
 
-    DWORD64  *pW32pServiceTable = NULL;
-    CHAR    **Names = NULL;
-    PCHAR     pfn;
+    DWORD64* pW32pServiceTable = NULL;
+    PCHAR* pszNames = NULL;
+    PCHAR pfn;
 
-    IMAGE_IMPORT_BY_NAME *ImportEntry;
+    IMAGE_IMPORT_BY_NAME* ImportEntry;
 
     HMODULE win32u = NULL;
     ULONG win32uLimit;
     PWIN32_SHADOWTABLE ShadowTable = NULL;
 
-    PCHAR ServiceName;
+    PCHAR lpServiceName;
 
     hde64s hs;
 
-    if (!GetImageVersionInfo(ModuleName, NULL, NULL, &BuildNumber, NULL)) {
-        ConsoleShowMessage("[!] Failed to query win32k.sys version information.\r\n",
-            FOREGROUND_RED | FOREGROUND_INTENSITY);
-        return FALSE;
-    }
+#ifdef _DEBUG
+    dwBuildNumber = g_ctx.OsVersion.dwBuildNumber;
+#else
+    dwBuildNumber = g_ctx.OsVersion.dwBuildNumber;
+#endif
 
-    switch (BuildNumber) {
+    switch (dwBuildNumber) {
 
-    case 7600:
-    case 7601:
+    case NT_WIN7_RTM:
+    case NT_WIN7_SP1:
         if (ServiceTable->CountOfEntries != W32pServiceTableLimit_7601)
             return FALSE;
-        Names = (CHAR**)W32pServiceTableNames_7601;
+        pszNames = (CHAR**)W32pServiceTableNames_7601;
         break;
 
-    case 9200:
+    case NT_WIN8_RTM:
         if (ServiceTable->CountOfEntries != W32pServiceTableLimit_9200)
             return FALSE;
-        Names = (CHAR**)W32pServiceTableNames_9200;
+        pszNames = (CHAR**)W32pServiceTableNames_9200;
         break;
 
-    case 9600:
+    case NT_WIN8_BLUE:
         if (ServiceTable->CountOfEntries != W32pServiceTableLimit_9600)
             return FALSE;
-        Names = (CHAR**)W32pServiceTableNames_9600;
+        pszNames = (CHAR**)W32pServiceTableNames_9600;
         break;
 
     default:
@@ -341,9 +340,7 @@ BOOL FuzzLookupWin32kNames(
         break;
     }
 
-    lpServiceNames = (CHAR**)HeapAlloc(GetProcessHeap(),
-        HEAP_ZERO_MEMORY,
-        ServiceTable->CountOfEntries * sizeof(PCHAR));
+    lpServiceNames = (CHAR**)supHeapAlloc(ServiceTable->CountOfEntries * sizeof(PCHAR));
 
     if (lpServiceNames == NULL)
         return FALSE;
@@ -357,24 +354,21 @@ BOOL FuzzLookupWin32kNames(
     // If win32k version below 10240 copy them from predefined array.
     // Otherwise lookup them dynamically.
     //
-    if (BuildNumber < 10240) {
-        if (Names == NULL)
+    if (dwBuildNumber < NT_WIN10_THRESHOLD1) {
+        if (pszNames == NULL)
             return FALSE;
 
         for (i = 0; i < ServiceTable->CountOfEntries; i++) {
-            lpServiceNames[i] = Names[i];
+            lpServiceNames[i] = pszNames[i];
         }
     }
     else {
 
-        //
-        // 
-        //
-        if (BuildNumber >= 14393) {
+        if (dwBuildNumber >= NT_WIN10_REDSTONE1) {
 
-            win32u = LoadLibraryEx(TEXT("win32u.dll"), NULL, 0);
+            win32u = GetModuleHandle(TEXT("win32u.dll"));
             if (win32u == NULL) {
-                ConsoleShowMessage("[!] Failed to load win32u.dll.\r\n",
+                ConsoleShowMessage("[!] Failed to reference win32u.dll.\r\n",
                     FOREGROUND_RED | FOREGROUND_INTENSITY);
                 return FALSE;
             }
@@ -391,10 +385,10 @@ BOOL FuzzLookupWin32kNames(
 
         for (i = 0; i < ServiceTable->CountOfEntries; i++) {
 
-            ServiceName = "UnknownName";
+            lpServiceName = "UnknownName";
 
-            if (BuildNumber <= 10586) {
-                pfn = (PCHAR)(pW32pServiceTable[i] - NtHeaders->OptionalHeader.ImageBase + MappedImageBase);
+            if (dwBuildNumber <= NT_WIN10_THRESHOLD2) {
+                pfn = (PCHAR)(pW32pServiceTable[i] - NtHeaders->OptionalHeader.ImageBase + (ULONG_PTR)MappedImageBase);
                 hde64_disasm((void*)pfn, &hs);
                 if (hs.flags & F_ERROR) {
 
@@ -403,23 +397,22 @@ BOOL FuzzLookupWin32kNames(
 
                     break;
                 }
-                Address = MappedImageBase + *(ULONG_PTR*)(pfn + hs.len + *(DWORD*)(pfn + (hs.len - 4)));
+                Address = (ULONG_PTR)MappedImageBase + *(ULONG_PTR*)(pfn + hs.len + *(DWORD*)(pfn + (hs.len - 4)));
                 if (Address) {
-                    ImportEntry = (IMAGE_IMPORT_BY_NAME *)Address;
-                    ServiceName = ImportEntry->Name;
+                    ImportEntry = (IMAGE_IMPORT_BY_NAME*)Address;
+                    lpServiceName = ImportEntry->Name;
                 }
             }
-            else if (BuildNumber >= 14393) {
+            else if (dwBuildNumber >= NT_WIN10_REDSTONE1) {
 
-                ServiceName = FuzzResolveW32kServiceNameById(i + 0x1000, ShadowTable);
-                if (ServiceName == NULL) ServiceName = "UnknownName";
+                lpServiceName = FuzzResolveW32kServiceNameById(i + W32SYSCALLSTART, ShadowTable);
+                if (lpServiceName == NULL)
+                    lpServiceName = "UnknownName";
 
             }
-            lpServiceNames[i] = ServiceName;
+            lpServiceNames[i] = lpServiceName;
         }
     }
-
-    if (win32u) FreeLibrary(win32u);
 
     return TRUE;
 }
@@ -438,7 +431,7 @@ DWORD WINAPI FuzzThreadProc(
 {
     ULONG64 i, c;
     HMODULE hUser32 = NULL;
-    CALL_PARAM *Context = (CALL_PARAM*)Parameter;
+    CALL_PARAM* Context = (CALL_PARAM*)Parameter;
 
     if (Context->Syscall >= W32SYSCALLSTART)
         hUser32 = LoadLibrary(TEXT("user32.dll"));
@@ -469,7 +462,7 @@ void PrintServiceInformation(
     _In_opt_ LPCSTR ServiceName,
     _In_ BOOL BlackListed)
 {
-    CHAR *pLog;
+    CHAR* pLog;
     CHAR szConsoleText[4096];
     WORD wColor = 0;
 
@@ -507,7 +500,7 @@ void PrintServiceInformation(
 *
 */
 VOID FuzzRunThreadWithWait(
-    _In_ CALL_PARAM *CallParams
+    _In_ CALL_PARAM* CallParams
 )
 {
     HANDLE hThread;
@@ -541,18 +534,18 @@ VOID FuzzRunThreadWithWait(
 *
 */
 VOID FuzzRun(
-    _In_ NTCALL_CONTEXT *Context
+    _In_ NTCALL_CONTEXT* Context
 )
 {
     BOOL probeWin32k = Context->ProbeWin32k, bSkip = FALSE;
-    BLACKLIST *BlackList = &Context->BlackList;
-    ULONG_PTR hNtdll = Context->hNtdll;
+    BLACKLIST* BlackList = &Context->BlackList;
+    PVOID ntdllBase = Context->NtdllBase;
     PRAW_SERVICE_TABLE ServiceTable = &Context->ServiceTable;
     ULONG c, sid;
 
     CALL_PARAM CallParams;
 
-    PCHAR  ServiceName, pLog;
+    PCHAR lpServiceName, pLog;
 
     CHAR szOut[MAX_PATH * 2];
 
@@ -568,22 +561,22 @@ VOID FuzzRun(
         // Query service name.
         //
         if (probeWin32k) {
-            sid = Context->SingleSyscallId - W32SYSCALLSTART;
-            ServiceName = Context->Win32pServiceTableNames[sid];
+            sid = Context->u1.SingleSyscallId - W32SYSCALLSTART;
+            lpServiceName = Context->Win32pServiceTableNames[sid];
         }
         else {
-            sid = Context->SingleSyscallId;
-            ServiceName = (PCHAR)PELoaderGetProcNameBySDTIndex(hNtdll, sid);
+            sid = Context->u1.SingleSyscallId;
+            lpServiceName = supLdrGetProcNameBySDTIndex(ntdllBase, sid);
         }
 
         //
         // Output service information to console.
         //
         _strcpy_a(szOut, "\tProbing #");
-        ultostr_a(Context->SingleSyscallId, _strend_a(szOut));
+        ultostr_a(Context->u1.SingleSyscallId, _strend_a(szOut));
         pLog = _strcat_a(szOut, "\t");
-        if (ServiceName) {
-            _strncpy_a(pLog, MAX_PATH, ServiceName, MAX_PATH);
+        if (lpServiceName) {
+            _strncpy_a(pLog, MAX_PATH, lpServiceName, MAX_PATH);
         }
         else {
             _strcpy_a(pLog, "Unknown");
@@ -595,7 +588,7 @@ VOID FuzzRun(
         // Setup service call parameters and call it in separate thread.
         //
         CallParams.ParametersInStack = Context->ServiceTable.StackArgumentTable[sid];
-        CallParams.Syscall = Context->SingleSyscallId;
+        CallParams.Syscall = Context->u1.SingleSyscallId;
         CallParams.ThreadTimeout = INFINITE;
         CallParams.NumberOfPassesForCall = Context->SyscallPassCount;
         CallParams.LogParams = &g_Log;
@@ -604,22 +597,30 @@ VOID FuzzRun(
     }
     else {
 
-        for (c = 0; c < ServiceTable->CountOfEntries; c++) {
+        c = 0;
+        if (Context->ProbeFromSyscallId) {
+            if (Context->ProbeWin32k)
+                c = Context->u1.StartingSyscallId - W32SYSCALLSTART;
+            else
+                c = Context->u1.StartingSyscallId;
+        }
+
+        for (; c < ServiceTable->CountOfEntries; c++) {
 
             //
             // Query service name.
             //
             if (probeWin32k) {
-                ServiceName = Context->Win32pServiceTableNames[c];
+                lpServiceName = Context->Win32pServiceTableNames[c];
                 sid = W32SYSCALLSTART + c;
             }
             else {
-                ServiceName = (PCHAR)PELoaderGetProcNameBySDTIndex(hNtdll, c);
+                lpServiceName = supLdrGetProcNameBySDTIndex(ntdllBase, c);
                 sid = c;
             }
 
-            if (ServiceName) {
-                bSkip = BlackListEntryPresent(BlackList, (LPCSTR)ServiceName);
+            if (lpServiceName) {
+                bSkip = BlackListEntryPresent(BlackList, (LPCSTR)lpServiceName);
             }
 
             //
@@ -627,7 +628,7 @@ VOID FuzzRun(
             //
             PrintServiceInformation(ServiceTable->StackArgumentTable[c] / 4,
                 sid,
-                ServiceName,
+                lpServiceName,
                 bSkip);
 
             if (bSkip) {
