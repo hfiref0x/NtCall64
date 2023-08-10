@@ -1,3 +1,4 @@
+[![Build status](https://ci.appveyor.com/api/projects/status/7aio324c7pkmqxfm?svg=true)](https://ci.appveyor.com/project/hfiref0x/ntcall64)
 
 # NTCALL64
 ## Windows NT x64 syscall fuzzer.
