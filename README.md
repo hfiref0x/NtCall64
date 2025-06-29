@@ -158,6 +158,14 @@ Before using, set up crash dump settings (see [MSDN docs](https://learn.microsof
 
 ---
 
+# Support
+
+If you find this project interesting, you can buy me a coffee
+
+BTC (Bitcoin): bc1qzkvtpa0053cagf35dqmpvv9k8hyrwl7krwdz84q39mcpy68y6tmqsju0g4
+
+---
+
 ## Authors
 
 (c) 2016 - 2025 NTCALL64 Project  
