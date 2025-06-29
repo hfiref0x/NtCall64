@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016 - 2023
+*  (C) COPYRIGHT AUTHORS, 2016 - 2025
 *
 *  TITLE:       LOG.H
 *
-*  VERSION:     1.37
+*  VERSION:     2.00
 *
-*  DATE:        04 Aug 2023
+*  DATE:        27 Jun 2025
 *
 *  Log support header file.
 *
@@ -19,10 +19,20 @@
 
 #pragma once
 
+#define NC64_LOG_MAX_ARGS 16
+
 typedef struct _NTCALL_LOG_PARAMS {
     BOOL LogToFile;
     HANDLE LogHandle;
 } NTCALL_LOG_PARAMS, * PNTCALL_LOG_PARAMS;
+
+#pragma pack(push, 1)
+typedef struct _NC64_SYSCALL_LOG_ENTRY {
+    ULONG SyscallNumber;
+    ULONG ArgCount;
+    ULONG_PTR Arguments[NC64_LOG_MAX_ARGS];
+} NC64_SYSCALL_LOG_ENTRY, * PNC64_SYSCALL_LOG_ENTRY;
+#pragma pack(pop)
 
 BOOLEAN FuzzOpenLog(
     _In_ LPWSTR LogDeviceFileName,
@@ -31,11 +41,7 @@ BOOLEAN FuzzOpenLog(
 VOID FuzzCloseLog(
     _In_ PNTCALL_LOG_PARAMS LogParams);
 
-VOID FuzzLogCallName(
-    _In_ PNTCALL_LOG_PARAMS LogParams,
-    _In_ LPCSTR ServiceName);
-
-VOID FuzzLogCallParameters(
+VOID FuzzLogCallBinary(
     _In_ PNTCALL_LOG_PARAMS LogParams,
     _In_ ULONG ServiceId,
     _In_ ULONG NumberOfArguments,

@@ -1,130 +1,166 @@
 [![Build status](https://ci.appveyor.com/api/projects/status/7aio324c7pkmqxfm?svg=true)](https://ci.appveyor.com/project/hfiref0x/ntcall64)
+[![Visitors](https://api.visitorbadge.io/api/visitors?path=github.com%2Fhfiref0x%2Fntcall&countColor=%23263759&style=flat)](https://visitorbadge.io/status?path=github.com%2Fhfiref0x%2Fntcall)
 
 # NTCALL64
-## Windows NT x64 syscall fuzzer.
+## Windows NT x64 syscall fuzzer
 
-This program based on NtCall by Peter Kosyh. It isn't advanced version and its purpose - port NtCall functionality for x64 Windows NT 6+.
+NTCALL64 is a syscall fuzzer for 64-bit Windows NT 6+ (Windows 7 and later), based on the original [NtCall](http://gl00my.chat.ru/) by Peter Kosyh.  
+Its purpose is to port and extend the functionality of NtCall for x64 Windows, enabling researchers to fuzz system call tables (`ntoskrnl` and optionally `win32k`) for vulnerabilities and stability issues.
 
-# System Requirements
+---
 
-+ x64 Windows 7/8/8.1/10/11;
-+ Account with administrative privileges (optional).
+## Table of Contents
 
-# Usage
-NTCALL64 -help[-win32k][-log][-call Id][-pc Value][-wt Value][-s]
+- [System Requirements](#system-requirements)
+- [Usage](#usage)
+- [Configuration](#configuration)
+- [Build](#build)
+- [Warnings](#warnings)
+- [Bugs Found with NtCall64](#bugs-found-with-ntcall64)
+- [Authors](#authors)
 
-* -help      - show program parameters help;
-* -log       - enable logging via COM1 port, service parameters will be logged (slow), default disabled;
-* -pname     - port name for logging, default COM1 (-log enabled required, mutual exclusive with -ofile);
-* -ofile     - file name for logging, default ntcall64.log (-log enabled required, mutual exclusive with -pname);
-* -win32k    - launch W32pServiceTable services fuzzing (sometimes referenced as Shadow SSDT);
-* -call Id   - fuzz syscall by supplied id (id can be from any table ntos/win32k);
-* -pc Value  - set pass count for each syscall (maximum value is limited to ULONG64 max value), default value 65536;
-* -wt Value  - set wait timeout for calling threads in seconds (except single syscall fuzzing), default value is 30;
-* -start Id  - Fuzz syscall table starting from given syscall id, mutual exclusive with -call;
-* -s         - Attempt to run program from LocalSystem account.
+---
 
+## System Requirements
 
-When used without parameters NtCall64 will start fuzzing services in KiServiceTable (ntos, sometimes referenced as SSDT).
+- x64 version of Windows 10 or 11
+- Administrative privileges recommended for full functionality
 
-Default timeout of each fuzzing thread is set to 30 sec. If logging enabled then timeout extended to 120 sec.
+---
 
-Note that when used with -call option all blacklists will be ignored and fuzzing thread timeout will be set to INFINITE.
+## Usage
 
-Example: 
-+ ntcall64 -log
-+ ntcall64 -log -pc 1234
-+ ntcall64 -log -pc 1234 -call 4096
-+ ntcall64 -log -ofile mylog.txt
-+ ntcall64 -win32k -log -pname COM2
-+ ntcall64 -win32k
-+ ntcall64 -win32k -log
-+ ntcall64 -win32k -log -pc 1234
-+ ntcall64 -call 4097
-+ ntcall64 -call 4097 -log
-+ ntcall64 -call 4097 -log -pc 1000
-+ ntcall64 -pc 1000
-+ ntcall64 -s
-+ ntcall64 -pc 1000 -s
+```
+ntcall64.exe -help [-win32k] [-log [-o <file_or_port>]] [-call Id] [-pc Value] [-wt Value] [-sc Value] [-s] [-h]
+```
 
-Note: make sure to configure Windows crash dump settings before trying this tool 
+**Options:**
 
-(e.g. https://msdn.microsoft.com/en-us/library/windows/hardware/ff542953(v=vs.85).aspx).
+| Option          | Description                                                                                                  |
+|-----------------|-------------------------------------------------------------------------------------------------------------|
+| `-help`         | Show help information                                                                                        |
+| `-win32k`       | Fuzz the win32k graphical subsystem service table (aka Shadow SSDT); default is ntoskrnl table              |
+| `-log`          | Enable logging of call parameters (reduces performance)                                                      |
+| `-o Value`      | Output log destination (COM port name like `COM1`, `COM2`, or file name, default: `ntcall64.log` if omitted)|
+| `-call Id`      | Fuzz only the syscall with the supplied numeric ID (from any table); disables blacklists                     |
+| `-pc Value`     | Set number of passes for each syscall (default: 65536)                                                      |
+| `-wt Value`     | Set thread wait timeout in seconds (default: 30; if logging, timeout is 240)                                |
+| `-sc Value`     | Start fuzzing from the specified syscall table index (default: 0)                                            |
+| `-h`            | Enable heuristics when building syscall parameters                                                           |
+| `-s`            | Attempt to run program from LocalSystem account                                                             |
 
-# How it work
+**Examples:**
+```
+ntcall64.exe -win32k
+ntcall64.exe -log -o COM2
+ntcall64.exe -win32k -log -pc 1234
+ntcall64.exe -call 4097 -log -pc 1000
+ntcall64.exe -s
+```
 
-It brute-force through system services and call them multiple times with input parameters randomly taken from predefined "bad arguments" list.
+**Notes:**
+- If run without parameters, fuzzes all ntoskrnl (`KiServiceTable`) services.
+- When using `-call`, blacklists are ignored and the thread timeout is set to infinite.
+- Logging can be sent to a serial port or a file. COM port logging is for hardware debugging.
 
+---
 
-# Configuration
+## Configuration
 
-By using badcalls.ini configuration file you can blacklist certain services. To do this - add service name (case sensitive) to the corresponding section of the badcalls.ini, e.g. if you want to blacklist services from KiServiceTable then use [ntos] section.
+You can blacklist specific services using the `badcalls.ini` configuration file.  
+Add service names (case-sensitive) to the appropriate `[ntos]` or `[win32k]` section.
 
-Example of badcalls.ini (default config shipped with program)
-
-<pre>[ntos]
+**Example `badcalls.ini` (snippet):**
+```
+[ntos]
 NtClose
+NtContinue
+NtDelayExecution
 NtInitiatePowerAction
+NtMapUserPhysicalPagesScatter
+NtPropagationComplete
+NtRaiseException
 NtRaiseHardError
 NtReleaseKeyedEvent
-NtPropagationComplete
+NtReplacePartitionUnit
+NtSetDefaultLocale
+NtSetDefaultUILanguage
+NtSetIoCompletion
+NtSetSystemPowerState
 NtShutdownSystem
 NtSuspendProcess
 NtSuspendThread
 NtTerminateProcess
 NtTerminateThread
 NtWaitForAlertByThreadId
-NtWaitForSingleObject
 NtWaitForKeyedEvent
+NtWaitForSingleObject
 
 [win32k]
+NtUserDoSoundConnect
+NtUserEnumDisplayMonitors
+NtUserGetMessage
+NtUserLockWorkStation
+NtUserMsgWaitForMultipleObjectsEx
+NtUserPostMessage
+NtUserRealInternalGetMessage
 NtUserRealWaitMessageEx
 NtUserShowSystemCursor
 NtUserSwitchDesktop
-NtUserLockWorkStation
-NtUserEnumDisplayMonitors
-NtUserGetMessage
-NtUserWaitMessage
-NtUserDoSoundConnect
-NtUserRealInternalGetMessage
-NtUserBroadcastThemeChangeEvent
 NtUserWaitAvailableMessageEx
-NtUserMsgWaitForMultipleObjectsEx</pre>
+NtUserWaitMessage
+```
+The default config is included.
 
-# Warning
+---
 
-This program may crash the operation system, affect it stability, which may result in data lost or program crash itself. You use it at your own risk.
+## Build
 
-# Bugs found with NtCall64
+NTCALL64 is written in C with minimal assembler use.  
+You need Microsoft Visual Studio 2017 or later.
 
-* [win32k!NtGdiDdDDISetHwProtectionTeardownRecovery](https://gist.githubusercontent.com/hfiref0x/6901a8e571946e84d8adb1c6f720fdad/raw/63c27cc71828969f7802ad5f7677f2bafe6d84fb/gistfile1.txt)
-* [win32k!NtUserCreateActivationObject](https://gist.githubusercontent.com/hfiref0x/23a2331588e7765664f50cac26cf0637/raw/49457ef5e30049b6b4ca392e489aaceaafe2b280/NtUserCreateActivationObject.cpp)
-* [win32k!NtUserOpenDesktop](https://gist.githubusercontent.com/hfiref0x/6e726b352da7642fc5b84bf6ebce0007/raw/8df05220f194da4980f401e15a0efdb7694deb26/NtUserOpenDesktop.c)
-* [win32k!NtUserSetWindowsHookEx](https://gist.github.com/hfiref0x/8ecfbcc0a7afcc9917cef093ef3a18b2)
-* [win32k!NtUserInitialize->win32kbase!Win32kBaseUserInitialize](https://gist.github.com/hfiref0x/f731e690e6155c6763b801ce0e497db7)
-* [nt!NtLoadEnclaveData](https://gist.githubusercontent.com/hfiref0x/1ac328a8e73d053012e02955d38e36a8/raw/b26174f8b7b68506d62308ce4327dfc573b8aa26/main.c)
-* [nt!NtCreateIoRing](https://gist.github.com/hfiref0x/bd6365a7cfa881da0e9c9e7a917a051b)
-* [nt!NtQueryInformationCpuPartition](https://gist.github.com/hfiref0x/48bdc12241d0a981a6da473e979c8aff)
+**Instructions:**
+- Open the solution in Visual Studio.
+- Set the Platform Toolset:
+  - v141 for VS 2017
+  - v142 for VS 2019
+  - v143 for VS 2022
+- Set the Target Platform Version:
+  - 8.1 for v140
+  - 10 for v141 and above
+- Minimum required Windows SDK version: 8.1
 
+---
 
-# Build
+## Warnings
 
-NTCALL64 comes with full source code written in C with tiny assembler usage.
-In order to build from source you need Microsoft Visual Studio 2017 and later versions.
+> **This tool is for research and development. It may crash your system, cause instability, or data loss.**
+>
+> Use only in a controlled environment.  
+> **You are responsible for any damage caused by running NtCall64.**
 
-## Instructions
+**Tip:**  
+Before using, set up crash dump settings (see [MSDN docs](https://learn.microsoft.com/en-us/windows-hardware/drivers/debugger/enabling-a-kernel-mode-dump-file)) for easier debugging.
 
-* Select Platform ToolSet first for project in solution you want to build (Project->Properties->General): 
-  * v141 for Visual Studio 2017;
-  * v142 for Visual Studio 2019;
-  * v143 for Visual Studio 2022.
-* For v140 and above set Target Platform Version (Project->Properties->General):
-  * If v140 then select 8.1;
-  * If v141 and above then select 10.
-* Minimum required Windows SDK version 8.1  
+---
 
-# Authors
+## Bugs Found with NtCall64
 
-(c) 2016 - 2023 NTCALL64 Project
+- [win32k!NtGdiDdDDISetHwProtectionTeardownRecovery](https://gist.githubusercontent.com/hfiref0x/6901a8e571946e84d8adb1c6f720fdad/raw/63c27cc71828969f7802ad5f7677f2bafe6d84fb/gistfile1.txt)
+- [win32k!NtUserCreateActivationObject](https://gist.githubusercontent.com/hfiref0x/23a2331588e7765664f50cac26cf0637/raw/49457ef5e30049b6b4ca392e489aaceaafe2b280/NtUserCreateActivationObject.cpp)
+- [win32k!NtUserOpenDesktop](https://gist.githubusercontent.com/hfiref0x/6e726b352da7642fc5b84bf6ebce0007/raw/8df05220f194da4980f401e15a0efdb7694deb26/NtUserOpenDesktop.c)
+- [win32k!NtUserSetWindowsHookEx](https://gist.github.com/hfiref0x/8ecfbcc0a7afcc9917cef093ef3a18b2)
+- [win32k!NtUserInitialize → win32kbase!Win32kBaseUserInitialize](https://gist.github.com/hfiref0x/f731e690e6155c6763b801ce0e497db7)
+- [win32k!NtUserRegisterCoreMessagingEndPoint](https://gist.github.com/hfiref0x/0344e5e99e6eb43bda58c9525418cf30)
+- [nt!NtLoadEnclaveData](https://gist.githubusercontent.com/hfiref0x/1ac328a8e73d053012e02955d38e36a8/raw/b26174f8b7b68506d62308ce4327dfc573b8aa26/main.c)
+- [nt!NtCreateIoRing](https://gist.github.com/hfiref0x/bd6365a7cfa881da0e9c9e7a917a051b)
+- [nt!NtQueryInformationCpuPartition](https://gist.github.com/hfiref0x/48bdc12241d0a981a6da473e979c8aff)
 
-Original NtCall by Peter Kosyh aka Gloomy (c) 2001, http://gl00my.chat.ru/ 
+---
+
+## Authors
+
+(c) 2016 - 2025 NTCALL64 Project  
+Original NtCall by Peter Kosyh aka Gloomy (c) 2001, [gl00my.chat.ru](http://gl00my.chat.ru/)
+
+---

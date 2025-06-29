@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016 - 2021
+*  (C) COPYRIGHT AUTHORS, 2016 - 2025
 *
 *  TITLE:       BLACKLIST.C
 *
-*  VERSION:     1.35
+*  VERSION:     2.00
 *
-*  DATE:        21 Feb 2021
+*  DATE:        27 Jun 2025
 *
 *  Syscall blacklist handling.
 *
@@ -18,6 +18,72 @@
 *******************************************************************************/
 
 #include "global.h"
+
+#define BLACKLIST_HASH_TABLE_SIZE 256
+#define BLACKLIST_HASH_MASK (BLACKLIST_HASH_TABLE_SIZE - 1)
+
+/*
+* BlackListHashString
+*
+* Purpose:
+*
+* Hash string using FNV-1a algorithm.
+*
+*/
+DWORD BlackListHashString(
+    _In_ LPCSTR Name
+)
+{
+    DWORD Hash = 2166136261UL;
+    PCHAR p = (PCHAR)Name;
+
+    while (*p) {
+        Hash ^= *p++;
+        Hash *= 16777619;
+    }
+
+    return Hash;
+}
+
+/*
+* BlackListAddEntry
+*
+* Purpose:
+*
+* Add new entry to the blacklist hash table.
+*
+*/
+ULONG BlackListAddEntry(
+    _In_ BLACKLIST* BlackList,
+    _In_ LPCSTR SyscallName
+)
+{
+    PBL_ENTRY Entry;
+    ULONG Length, BucketIndex;
+    DWORD Hash;
+
+    Length = (ULONG)_strlen_a(SyscallName) + 1;
+    Hash = BlackListHashString(SyscallName);
+    BucketIndex = Hash & BLACKLIST_HASH_MASK;
+
+    Entry = (PBL_ENTRY)HeapAlloc(
+        BlackList->HeapHandle,
+        HEAP_ZERO_MEMORY,
+        sizeof(BL_ENTRY) + Length
+    );
+
+    if (Entry) {
+        Entry->Hash = Hash;
+
+        Entry->Name = (PCHAR)(Entry + 1);
+        _strncpy_a((char*)Entry->Name, Length, SyscallName, Length - 1);
+
+        InsertHeadList(&BlackList->HashTable[BucketIndex], &Entry->ListEntry);
+        BlackList->NumberOfEntries += 1;
+    }
+
+    return Length;
+}
 
 /*
 * BlackListCreateFromFile
@@ -33,19 +99,18 @@ BOOL BlackListCreateFromFile(
     _In_ LPCSTR ConfigSectionName
 )
 {
-    BOOL    bResult = FALSE;
-    LPSTR   Section = NULL, SectionPtr;
-    ULONG   nSize, SectionSize, BytesRead, Length;
-    CHAR    ConfigFilePath[MAX_PATH + 16];
-
-    HANDLE BlackListHeap;
-
-    PBL_ENTRY Entry = NULL;
+    LPSTR Section = NULL, SectionPtr;
+    ULONG nSize, SectionSize, BytesRead, Length;
+    CHAR ConfigFilePath[MAX_PATH + 16];
+    HANDLE BlackListHeap = NULL;
+    ULONG i;
 
     do {
-
+        RtlSecureZeroMemory(BlackList, sizeof(BLACKLIST));
         RtlSecureZeroMemory(ConfigFilePath, sizeof(ConfigFilePath));
-        GetModuleFileNameA(NULL, (LPSTR)&ConfigFilePath, MAX_PATH);
+        if (GetModuleFileNameA(NULL, (LPSTR)&ConfigFilePath, MAX_PATH) == 0)
+            break;
+
         _filepath_a(ConfigFilePath, ConfigFilePath);
         _strcat_a(ConfigFilePath, ConfigFileName);
 
@@ -56,7 +121,6 @@ BOOL BlackListCreateFromFile(
         HeapSetInformation(BlackListHeap, HeapEnableTerminationOnCorruption, NULL, 0);
 
         nSize = 2 * (1024 * 1024);
-
         Section = (LPSTR)HeapAlloc(BlackListHeap, HEAP_ZERO_MEMORY, nSize);
         if (Section == NULL)
             break;
@@ -65,48 +129,36 @@ BOOL BlackListCreateFromFile(
         if (SectionSize == 0)
             break;
 
+        BlackList->HeapHandle = BlackListHeap;
+
+        for (i = 0; i < BLACKLIST_HASH_TABLE_SIZE; i++) {
+            InitializeListHead(&BlackList->HashTable[i]);
+        }
+
         BytesRead = 0;
         SectionPtr = Section;
 
-        RtlSecureZeroMemory(BlackList, sizeof(BLACKLIST));
-
-        InitializeListHead(&BlackList->ListHead);
-
-        do {
-
-            if (*SectionPtr == 0)
-                break;
-
-            Length = (ULONG)_strlen_a(SectionPtr) + 1;
+        while (BytesRead < SectionSize && *SectionPtr) {
+            Length = BlackListAddEntry(BlackList, SectionPtr);
             BytesRead += Length;
-
-            Entry = (BL_ENTRY*)HeapAlloc(BlackListHeap, HEAP_ZERO_MEMORY, sizeof(BL_ENTRY));
-            if (Entry == NULL) {
-                goto Cleanup;
-            }
-
-            Entry->Hash = BlackListHashString(SectionPtr);
-
-            InsertTailList(&BlackList->ListHead, &Entry->ListEntry);
-
-            BlackList->NumberOfEntries += 1;
-
             SectionPtr += Length;
-
-        } while (BytesRead < SectionSize);
-
-        BlackList->HeapHandle = BlackListHeap;
-
-        bResult = TRUE;
+        }
 
     } while (FALSE);
 
-Cleanup:
-
-    if (bResult == FALSE) {
-        if (BlackListHeap) HeapDestroy(BlackListHeap);
+    if (Section) {
+        HeapFree(BlackListHeap, 0, Section);
     }
-    return bResult;
+
+    if (BlackList->NumberOfEntries == 0) {
+        if (BlackListHeap) {
+            HeapDestroy(BlackListHeap);
+            BlackList->HeapHandle = NULL;
+        }
+        return FALSE;
+    }
+
+    return TRUE;
 }
 
 /*
@@ -122,43 +174,33 @@ BOOL BlackListEntryPresent(
     _In_ LPCSTR SyscallName
 )
 {
-    DWORD Hash = BlackListHashString(SyscallName);
-
+    DWORD Hash;
+    ULONG BucketIndex;
     PLIST_ENTRY Head, Next;
-    BL_ENTRY* entry;
+    BL_ENTRY* Entry;
 
-    Head = &BlackList->ListHead;
+    if (!BlackList || !BlackList->NumberOfEntries)
+        return FALSE;
+
+    Hash = BlackListHashString(SyscallName);
+    BucketIndex = Hash & BLACKLIST_HASH_MASK;
+
+    // Check only the specific bucket that should contain the entry
+    Head = &BlackList->HashTable[BucketIndex];
     Next = Head->Flink;
+
     while ((Next != NULL) && (Next != Head)) {
-        entry = CONTAINING_RECORD(Next, BL_ENTRY, ListEntry);
-        if (entry->Hash == Hash)
-            return TRUE;
+        Entry = CONTAINING_RECORD(Next, BL_ENTRY, ListEntry);
+
+        if (Entry->Hash == Hash) {
+            if (_strcmp_a(Entry->Name, SyscallName) == 0)
+                return TRUE;
+        }
 
         Next = Next->Flink;
     }
 
     return FALSE;
-}
-
-/*
-* BlackListHashString
-*
-* Purpose:
-*
-* Hash string.
-*
-*/
-DWORD BlackListHashString(
-    _In_ LPCSTR Name
-)
-{
-    DWORD Hash = 5381;
-    PCHAR p = (PCHAR)Name;
-
-    while (*p)
-        Hash = 33 * Hash ^ *p++;
-
-    return Hash;
 }
 
 /*

@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016 - 2023
+*  (C) COPYRIGHT AUTHORS, 2016 - 2025
 *
 *  TITLE:       SUP.C
 *
-*  VERSION:     1.37
+*  VERSION:     2.00
 *
-*  DATE:        04 Aug 2023
+*  DATE:        27 Jun 2025
 *
 *  Support routines.
 *
@@ -19,7 +19,7 @@
 
 #include "global.h"
 
-VOID ConsoleInit(
+BOOL ConsoleInit(
     VOID)
 {
     COORD coordScreen = { 0, 0 };
@@ -28,8 +28,11 @@ VOID ConsoleInit(
     DWORD dwConSize;
     HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
 
+    if (hConsole == INVALID_HANDLE_VALUE)
+        return FALSE;
+
     if (!GetConsoleScreenBufferInfo(hConsole, &csbi))
-        return;
+        return FALSE;
 
     SetConsoleTextAttribute(hConsole, FOREGROUND_BLUE | FOREGROUND_GREEN | FOREGROUND_RED);
 
@@ -37,16 +40,79 @@ VOID ConsoleInit(
 
     if (!FillConsoleOutputCharacter(hConsole, (TCHAR)' ',
         dwConSize, coordScreen, &cCharsWritten))
-        return;
+        return FALSE;
 
     if (!GetConsoleScreenBufferInfo(hConsole, &csbi))
-        return;
+        return FALSE;
 
     if (!FillConsoleOutputAttribute(hConsole, csbi.wAttributes,
         dwConSize, coordScreen, &cCharsWritten))
-        return;
+        return FALSE;
 
     SetConsoleCursorPosition(hConsole, coordScreen);
+
+    return TRUE;
+}
+
+/*
+* ConsoleShowMessage2
+*
+* Purpose:
+*
+* Output text to screen on the same line.
+*
+*/
+VOID ConsoleShowMessage2(
+    _In_ LPCSTR lpMessage,
+    _In_ WORD wColor
+)
+{
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    ULONG r, sz;
+    WORD SavedAttributes = 0;
+    HANDLE hStdHandle = GetStdHandle(STD_OUTPUT_HANDLE);
+    BOOL isCarriageReturn = FALSE;
+    LPSTR lpClearBuffer = NULL;
+    DWORD clearBufferSize;
+
+    sz = (DWORD)_strlen_a(lpMessage);
+    if (sz == 0)
+        return;
+
+    if (lpMessage[0] == '\r') {
+        isCarriageReturn = TRUE;
+        lpMessage++;
+        sz--;
+    }
+
+    RtlSecureZeroMemory(&csbi, sizeof(csbi));
+    GetConsoleScreenBufferInfo(hStdHandle, &csbi);
+
+    if (wColor) {
+        SavedAttributes = csbi.wAttributes;
+        SetConsoleTextAttribute(hStdHandle, wColor);
+    }
+
+    if (isCarriageReturn) {
+        COORD beginPos = { 0, csbi.dwCursorPosition.Y };
+        SetConsoleCursorPosition(hStdHandle, beginPos);
+
+        clearBufferSize = csbi.dwSize.X;
+        lpClearBuffer = (LPSTR)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, clearBufferSize + 1);
+
+        if (lpClearBuffer) {
+            memset(lpClearBuffer, ' ', clearBufferSize);
+            WriteFile(hStdHandle, lpClearBuffer, clearBufferSize, &r, NULL);
+            SetConsoleCursorPosition(hStdHandle, beginPos);
+            HeapFree(GetProcessHeap(), 0, lpClearBuffer);
+        }
+    }
+
+    WriteFile(hStdHandle, lpMessage, sz, &r, NULL);
+
+    if (wColor) {
+        SetConsoleTextAttribute(hStdHandle, SavedAttributes);
+    }
 }
 
 /*
@@ -59,35 +125,28 @@ VOID ConsoleInit(
 */
 VOID ConsoleShowMessage(
     _In_ LPCSTR lpMessage,
-    _In_opt_ WORD wColor
+    _In_ WORD wColor
 )
 {
     CONSOLE_SCREEN_BUFFER_INFO csbi;
-
     ULONG r, sz;
-
     WORD SavedAttributes = 0;
-
     HANDLE hStdHandle = GetStdHandle(STD_OUTPUT_HANDLE);
-
+    LPCSTR szNewLine = "\r\n";
 
     sz = (DWORD)_strlen_a(lpMessage);
     if (sz == 0)
         return;
 
     if (wColor) {
-
         RtlSecureZeroMemory(&csbi, sizeof(csbi));
-
         GetConsoleScreenBufferInfo(hStdHandle, &csbi);
-
         SavedAttributes = csbi.wAttributes;
-
         SetConsoleTextAttribute(hStdHandle, wColor);
-
     }
 
     WriteFile(hStdHandle, lpMessage, sz, &r, NULL);
+    WriteFile(hStdHandle, szNewLine, 2, &r, NULL);
 
     if (wColor) {
         SetConsoleTextAttribute(hStdHandle, SavedAttributes);
@@ -95,47 +154,59 @@ VOID ConsoleShowMessage(
 }
 
 /*
-* supGetCommandLineOption
+* supGetParamOption
 *
 * Purpose:
 *
-* Parse command line options.
+* Query parameters options by name and type.
 *
 */
-BOOLEAN supGetCommandLineOption(
-    _In_ LPCWSTR OptionName,
-    _In_ BOOLEAN IsParametric,
-    _Out_writes_opt_z_(ValueSize) LPWSTR OptionValue,
-    _In_ ULONG ValueSize,
-    _Out_opt_ PULONG ParamLength
+_Success_(return) 
+BOOL supGetParamOption(
+    _In_ LPCWSTR params,
+    _In_ LPCWSTR optionName,
+    _In_ BOOL isParametric,
+    _Out_opt_ LPWSTR value,
+    _In_ ULONG valueLength, //in chars
+    _Out_opt_ PULONG paramLength
 )
 {
-    BOOLEAN bResult;
-    LPWSTR cmdline = GetCommandLine();
-    WCHAR szParam[MAX_PATH + 1];
+    BOOL result;
+    WCHAR paramBuffer[MAX_PATH + 1];
     ULONG rlen;
-    INT	i = 0;
+    INT i = 0;
 
-    if (ParamLength)
-        *ParamLength = 0;
+    if (paramLength)
+        *paramLength = 0;
 
-    RtlSecureZeroMemory(szParam, sizeof(szParam));
+    if (isParametric) {
+        if (value == NULL || valueLength == 0)
+        {
+            return FALSE;
+        }
+    }
+
+    if (value)
+        *value = L'\0';
+
+    RtlSecureZeroMemory(paramBuffer, sizeof(paramBuffer));
+
     while (GetCommandLineParam(
-        cmdline, 
-        i, 
-        szParam, 
-        MAX_PATH, 
-        &rlen)) 
+        params,
+        i,
+        paramBuffer,
+        MAX_PATH,
+        &rlen))
     {
         if (rlen == 0)
             break;
 
-        if (_strcmp(szParam, OptionName) == 0) {
-            if (IsParametric) {
-                bResult = (BOOLEAN)GetCommandLineParam(cmdline, i + 1, OptionValue, ValueSize, &rlen);
-                if (ParamLength)
-                    *ParamLength = rlen;
-                return bResult;
+        if (_strcmp(paramBuffer, optionName) == 0) {
+            if (isParametric) {
+                result = GetCommandLineParam(params, i + 1, value, valueLength, &rlen);
+                if (paramLength)
+                    *paramLength = rlen;
+                return result;
             }
 
             return TRUE;
@@ -247,14 +318,14 @@ BOOLEAN supIsClientElevated(
 }
 
 /*
-* supLdrGetProcNameBySDTIndex
+* supGetProcNameBySDTIndex
 *
 * Purpose:
 *
 * Return name of service from ntdll by given syscall id.
 *
 */
-PCHAR supLdrGetProcNameBySDTIndex(
+PCHAR supGetProcNameBySDTIndex(
     _In_ PVOID ModuleBase,
     _In_ ULONG SDTIndex
 )
@@ -288,6 +359,77 @@ PCHAR supLdrGetProcNameBySDTIndex(
 }
 
 /*
+* supEnumWin32uServices
+*
+* Purpose:
+*
+* Enumerate win32u module services to the table.
+*
+*/
+ULONG supEnumWin32uServices(
+    _In_ HANDLE HeapHandle,
+    _In_ LPVOID ModuleBase,
+    _Inout_ PWIN32_SHADOWTABLE* Table
+)
+{
+    ULONG i, j, result = 0, exportSize;
+    PBYTE fnptr;
+    PDWORD funcTable, nameTableBase;
+    PWORD nameOrdinalTableBase;
+    PWIN32_SHADOWTABLE tableEntry;
+    PIMAGE_EXPORT_DIRECTORY pImageExportDirectory;
+
+    pImageExportDirectory = (PIMAGE_EXPORT_DIRECTORY)RtlImageDirectoryEntryToData(ModuleBase,
+        TRUE, IMAGE_DIRECTORY_ENTRY_EXPORT, &exportSize);
+
+    if (pImageExportDirectory) {
+
+        nameTableBase = (PDWORD)RtlOffsetToPointer(ModuleBase, pImageExportDirectory->AddressOfNames);
+        nameOrdinalTableBase = (PUSHORT)RtlOffsetToPointer(ModuleBase, pImageExportDirectory->AddressOfNameOrdinals);
+        funcTable = (PDWORD)RtlOffsetToPointer(ModuleBase, pImageExportDirectory->AddressOfFunctions);
+
+        result = 0;
+
+        for (i = 0; i < pImageExportDirectory->NumberOfFunctions; ++i) {
+            if (i >= pImageExportDirectory->NumberOfNames)
+                continue;
+
+            fnptr = (PBYTE)RtlOffsetToPointer(ModuleBase, funcTable[nameOrdinalTableBase[i]]);
+            if (*(PDWORD)fnptr != 0xb8d18b4c) //mov r10, rcx; mov eax
+                continue;
+
+            tableEntry = (PWIN32_SHADOWTABLE)HeapAlloc(HeapHandle,
+                HEAP_ZERO_MEMORY, sizeof(WIN32_SHADOWTABLE));
+
+            if (tableEntry == NULL)
+                break;
+
+            tableEntry->Index = *(PDWORD)(fnptr + 4);
+
+            for (j = 0; j < pImageExportDirectory->NumberOfNames; ++j)
+            {
+                if (nameOrdinalTableBase[j] == i)
+                {
+                    _strncpy_a(&tableEntry->Name[0],
+                        sizeof(tableEntry->Name),
+                        (LPCSTR)RtlOffsetToPointer(ModuleBase, nameTableBase[j]),
+                        sizeof(tableEntry->Name) - 1);
+
+                    break;
+                }
+            }
+
+            ++result;
+
+            *Table = tableEntry;
+            Table = &tableEntry->NextService;
+        }
+    }
+
+    return result;
+}
+
+/*
 * supPrivilegeEnabled
 *
 * Purpose:
@@ -298,7 +440,7 @@ PCHAR supLdrGetProcNameBySDTIndex(
 NTSTATUS supPrivilegeEnabled(
     _In_ HANDLE ClientToken,
     _In_ ULONG Privilege,
-    _Out_ PBOOLEAN pfResult
+    _Out_ PBOOL pfResult
 )
 {
     NTSTATUS status;
@@ -405,9 +547,9 @@ PSID supQueryProcessSid(
 */
 NTSTATUS supIsLocalSystem(
     _In_ HANDLE hToken,
-    _Out_ PBOOLEAN pbResult)
+    _Out_ PBOOL pbResult)
 {
-    BOOLEAN bResult = FALSE;
+    BOOL bResult = FALSE;
     NTSTATUS status = STATUS_UNSUCCESSFUL;
     PSID SystemSid = NULL, TokenSid = NULL;
     SID_IDENTIFIER_AUTHORITY NtAuth = SECURITY_NT_AUTHORITY;
@@ -479,7 +621,7 @@ NTSTATUS supxGetSystemToken(
     _In_ PVOID ProcessList,
     _Out_ PHANDLE SystemToken)
 {
-    BOOLEAN bSystemToken = FALSE, bEnabled = FALSE;
+    BOOL bSystemToken = FALSE, bEnabled = FALSE;
     NTSTATUS Status = STATUS_UNSUCCESSFUL;
     ULONG NextEntryDelta = 0;
     HANDLE hObject = NULL;
@@ -489,7 +631,7 @@ NTSTATUS supxGetSystemToken(
     UNICODE_STRING usWinlogon = RTL_CONSTANT_STRING(L"winlogon.exe");
 
     union {
-        PSYSTEM_PROCESSES_INFORMATION Processes;
+        PSYSTEM_PROCESS_INFORMATION Processes;
         PBYTE ListRef;
     } List;
 
@@ -569,14 +711,11 @@ VOID supShowNtStatus(
 )
 {
     PCHAR lpMsg;
-    SIZE_T Length = _strlen_a(lpText);
-    lpMsg = (PCHAR)supHeapAlloc(Length + 200);
+    SIZE_T Length = _strlen_a(lpText) + MAX_PATH;
+    lpMsg = (PCHAR)supHeapAlloc(Length);
     if (lpMsg) {
-        _strcpy_a(lpMsg, "[!] ");
-        _strcat_a(lpMsg, lpText);
-        ultohex_a((ULONG)Status, _strend_a(lpMsg));
-        _strcat_a(lpMsg, "\r\n");
-        ConsoleShowMessage(lpMsg, FOREGROUND_RED | FOREGROUND_INTENSITY);
+        StringCchPrintfA(lpMsg, Length, "[!] %s 0x%lX", lpText, Status);
+        ConsoleShowMessage(lpMsg, TEXT_COLOR_RED);
         supHeapFree(lpMsg);
     }
 }
@@ -745,7 +884,7 @@ VOID supRunAsLocalSystem(
         if (!NT_SUCCESS(Status) || (hSystemToken == NULL)) {
 
             supShowNtStatus(
-                "No suitable system token found. Make sure you are running as administrator, code 0x",
+                "No suitable system token found. Make sure you are running as administrator, code ",
                 Status);
 
             break;
@@ -765,7 +904,7 @@ VOID supRunAsLocalSystem(
 
         if (!NT_SUCCESS(Status)) {
 
-            supShowNtStatus("Error duplicating impersonation token, code 0x", Status);
+            supShowNtStatus("Error duplicating impersonation token, code ", Status);
             break;
         }
 
@@ -782,7 +921,7 @@ VOID supRunAsLocalSystem(
 
         if (!NT_SUCCESS(Status)) {
 
-            supShowNtStatus("Error duplicating primary token, code 0x", Status);
+            supShowNtStatus("Error duplicating primary token, code ", Status);
             break;
         }
 
@@ -797,7 +936,7 @@ VOID supRunAsLocalSystem(
 
         if (!NT_SUCCESS(Status)) {
 
-            supShowNtStatus("Error while impersonating primary token, code 0x", Status);
+            supShowNtStatus("Error while impersonating primary token, code ", Status);
             break;
         }
 
@@ -821,7 +960,7 @@ VOID supRunAsLocalSystem(
             (PULONG)&dummy);
 
         if (!NT_SUCCESS(Status)) {
-            supShowNtStatus("Error adjusting token privileges, code 0x", Status);
+            supShowNtStatus("Error adjusting token privileges, code ", Status);
             break;
         }
 
@@ -835,7 +974,7 @@ VOID supRunAsLocalSystem(
             sizeof(ULONG));
 
         if (!NT_SUCCESS(Status)) {
-            supShowNtStatus("Error setting session id, code 0x", Status);
+            supShowNtStatus("Error setting session id, code ", Status);
             break;
         }
 
@@ -1000,25 +1139,28 @@ NTSTATUS supMapImageNoExecute(
 }
 
 /*
-* supLdrGetProcAddressEx
+* supGetProcAddressEx
 *
 * Purpose:
 *
 * Simplified GetProcAddress reimplementation.
 *
 */
-LPVOID supLdrGetProcAddressEx(
+LPVOID supGetProcAddressEx(
     _In_ LPVOID ImageBase,
     _In_ LPCSTR RoutineName
 )
 {
+    USHORT OrdinalIndex;
     PIMAGE_EXPORT_DIRECTORY ExportDirectory = NULL;
-    USHORT OrdinalNumber;
-    PULONG NameTableBase;
+    PULONG NameTableBase, FunctionTableBase;
     PUSHORT NameOrdinalTableBase;
-    PULONG Addr;
+    PCHAR CurrentName;
     LONG Result;
+
     ULONG High, Low, Middle = 0;
+    ULONG ExportDirRVA, ExportDirSize;
+    ULONG FunctionRVA;
 
     union {
         PIMAGE_NT_HEADERS64 nt64;
@@ -1037,52 +1179,228 @@ LPVOID supLdrGetProcAddressEx(
     }
 
     if (NtHeaders.nt->FileHeader.Machine == IMAGE_FILE_MACHINE_AMD64) {
-
-        ExportDirectory = (PIMAGE_EXPORT_DIRECTORY)RtlOffsetToPointer(ImageBase,
-            NtHeaders.nt64->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
-
+        ExportDirRVA = NtHeaders.nt64->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
+        ExportDirSize = NtHeaders.nt64->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].Size;
     }
     else if (NtHeaders.nt->FileHeader.Machine == IMAGE_FILE_MACHINE_I386) {
-
-        ExportDirectory = (PIMAGE_EXPORT_DIRECTORY)RtlOffsetToPointer(ImageBase,
-            NtHeaders.nt32->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress);
+        ExportDirRVA = NtHeaders.nt32->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].VirtualAddress;
+        ExportDirSize = NtHeaders.nt32->OptionalHeader.DataDirectory[IMAGE_DIRECTORY_ENTRY_EXPORT].Size;
     }
-    else
-    {
+    else {
         return NULL;
     }
 
+    if (ExportDirRVA == 0 || ExportDirSize == 0) {
+        return NULL;
+    }
+
+    ExportDirectory = (PIMAGE_EXPORT_DIRECTORY)RtlOffsetToPointer((ULONG_PTR)ImageBase, ExportDirRVA);
     NameTableBase = (PULONG)RtlOffsetToPointer(ImageBase, (ULONG)ExportDirectory->AddressOfNames);
     NameOrdinalTableBase = (PUSHORT)RtlOffsetToPointer(ImageBase, (ULONG)ExportDirectory->AddressOfNameOrdinals);
+    FunctionTableBase = (PULONG)((ULONG_PTR)ImageBase + ExportDirectory->AddressOfFunctions);
+
+    if (ExportDirectory->NumberOfNames == 0) {
+        return NULL;
+    }
+
     Low = 0;
     High = ExportDirectory->NumberOfNames - 1;
-    while (High >= Low) {
 
-        Middle = (Low + High) >> 1;
-
-        Result = _strcmp_a(
-            RoutineName,
-            (char*)RtlOffsetToPointer(ImageBase, NameTableBase[Middle]));
-
+    while (Low <= High) {
+        Middle = Low + (High - Low) / 2;
+        CurrentName = (PCHAR)RtlOffsetToPointer((ULONG_PTR)ImageBase, NameTableBase[Middle]);
+        Result = _strcmp_a(RoutineName, CurrentName);
+        if (Result == 0) {
+            OrdinalIndex = NameOrdinalTableBase[Middle];
+            if (OrdinalIndex >= ExportDirectory->NumberOfFunctions) {
+                return NULL;
+            }
+            FunctionRVA = FunctionTableBase[OrdinalIndex];
+            if (FunctionRVA == 0) {
+                return NULL;
+            }
+            return (LPVOID)RtlOffsetToPointer((ULONG_PTR)ImageBase, FunctionRVA);
+        }
         if (Result < 0) {
+            if (Middle == 0) break;
             High = Middle - 1;
         }
         else {
-            if (Result > 0) {
-                Low = Middle + 1;
-            }
-            else {
+            Low = Middle + 1;
+        }
+
+    }
+
+    return NULL;
+}
+
+/*
+* supFindKiServiceTable
+*
+* Purpose:
+*
+* Locate KiServiceTable in mapped ntoskrnl copy.
+*
+*/
+BOOLEAN supFindKiServiceTable(
+    _In_ PVOID MappedImageBase,
+    _In_ PRAW_SERVICE_TABLE ServiceTable
+)
+{
+    ULONG_PTR SectionPtr = 0;
+    PBYTE ptrCode = (PBYTE)MappedImageBase;
+    IMAGE_NT_HEADERS* NtHeaders = RtlImageNtHeader(MappedImageBase);
+    IMAGE_SECTION_HEADER* SectionTableEntry;
+    ULONG c, p, SectionSize = 0, SectionVA = 0;
+
+    const BYTE KiSystemServiceStartPattern[] = { 0x45, 0x33, 0xC9, 0x44, 0x8B, 0x05 };
+
+    SectionTableEntry = (PIMAGE_SECTION_HEADER)((PCHAR)NtHeaders +
+        sizeof(ULONG) +
+        sizeof(IMAGE_FILE_HEADER) +
+        NtHeaders->FileHeader.SizeOfOptionalHeader);
+
+    c = NtHeaders->FileHeader.NumberOfSections;
+    while (c > 0) {
+        if (*(PULONG)SectionTableEntry->Name == 'EGAP')
+            if ((SectionTableEntry->Name[4] == 'L') &&
+                (SectionTableEntry->Name[5] == 'K') &&
+                (SectionTableEntry->Name[6] == 0))
+
+            {
+                SectionVA = SectionTableEntry->VirtualAddress;
+                SectionPtr = (ULONG_PTR)RtlOffsetToPointer(MappedImageBase, SectionVA);
+                SectionSize = SectionTableEntry->Misc.VirtualSize;
                 break;
             }
-        }
+        c -= 1;
+        SectionTableEntry += 1;
     }
-    if (High < Low)
-        return NULL;
 
-    OrdinalNumber = NameOrdinalTableBase[Middle];
-    if ((ULONG)OrdinalNumber >= ExportDirectory->NumberOfFunctions)
-        return NULL;
+    if ((SectionPtr == 0) || (SectionSize == 0) || (SectionVA == 0)) {
+        return FALSE;
+    }
 
-    Addr = (PULONG)RtlOffsetToPointer(ImageBase, (ULONG)ExportDirectory->AddressOfFunctions);
-    return (LPVOID)RtlOffsetToPointer(ImageBase, Addr[OrdinalNumber]);
+    p = 0;
+    for (c = 0; c < (SectionSize - sizeof(KiSystemServiceStartPattern)); c++)
+        if (RtlCompareMemory(
+            (PVOID)(SectionPtr + c),
+            KiSystemServiceStartPattern,
+            sizeof(KiSystemServiceStartPattern)) == sizeof(KiSystemServiceStartPattern))
+        {
+            p = SectionVA + c;
+            break;
+        }
+
+    if (p == 0)
+        return FALSE;
+
+    p += 3;
+    c = *((PULONG)(ptrCode + p + 3)) + 7 + p;
+    ServiceTable->CountOfEntries = *((PULONG)(ptrCode + c));
+    p += 7;
+    c = *((PULONG)(ptrCode + p + 3)) + 7 + p;
+    ServiceTable->StackArgumentTable = (PBYTE)ptrCode + c;
+    p += 7;
+    c = *((PULONG)(ptrCode + p + 3)) + 7 + p;
+    ServiceTable->ServiceTable = (LPVOID*)(ptrCode + c);
+
+    return TRUE;
+}
+
+/*
+* supFindW32pServiceTable
+*
+* Purpose:
+*
+* Locate shadow table info in mapped win32k copy.
+*
+*/
+BOOLEAN supFindW32pServiceTable(
+    _In_ PVOID MappedImageBase,
+    _In_ PRAW_SERVICE_TABLE ServiceTable
+)
+{
+    PULONG ServiceLimit;
+
+    ServiceLimit = (ULONG*)supGetProcAddressEx(MappedImageBase, "W32pServiceLimit");
+    if (ServiceLimit == NULL)
+        return FALSE;
+
+    ServiceTable->CountOfEntries = *ServiceLimit;
+    ServiceTable->StackArgumentTable = (PBYTE)supGetProcAddressEx(MappedImageBase, "W32pArgumentTable");
+    if (ServiceTable->StackArgumentTable == NULL)
+        return FALSE;
+
+    ServiceTable->ServiceTable = (LPVOID*)supGetProcAddressEx(MappedImageBase, "W32pServiceTable");
+    if (ServiceTable->ServiceTable == NULL)
+        return FALSE;
+
+    return TRUE;
+}
+
+/*
+* supResolveW32kServiceNameById
+*
+* Purpose:
+*
+* Return service name if found by id in prebuilt lookup table.
+*
+*/
+PCHAR supResolveW32kServiceNameById(
+    _In_ ULONG ServiceId,
+    _In_opt_ PWIN32_SHADOWTABLE ShadowTable
+)
+{
+    PWIN32_SHADOWTABLE Entry = ShadowTable;
+
+    while (Entry) {
+        if (Entry->Index == ServiceId) {
+            return Entry->Name;
+        }
+        Entry = Entry->NextService;
+    }
+
+    return NULL;
+}
+
+/*
+* supIsComPort
+*
+* Purpose:
+*
+* Return TRUE if wsz is a valid COM port string (COM1..COM255, case-insensitive, no extra chars).
+*
+*/
+BOOL supIsComPort(
+    _In_ LPCWSTR wsz
+)
+{
+    if (!wsz)
+        return FALSE;
+
+    if ((wsz[0] == L'C' || wsz[0] == L'c') &&
+        (wsz[1] == L'O' || wsz[1] == L'o') &&
+        (wsz[2] == L'M' || wsz[2] == L'm'))
+    {
+        int i = 3;
+        int portNum = 0;
+
+        if (wsz[i] == L'\0')
+            return FALSE;
+
+        while (wsz[i] && (i - 3) < 3) {
+            if (wsz[i] < L'0' || wsz[i] > L'9')
+                return FALSE;
+            portNum = portNum * 10 + (wsz[i] - L'0');
+            i++;
+        }
+
+        if (wsz[i] != L'\0')
+            return FALSE;
+
+        if (portNum >= 1 && portNum <= 255)
+            return TRUE;
+    }
+    return FALSE;
 }
