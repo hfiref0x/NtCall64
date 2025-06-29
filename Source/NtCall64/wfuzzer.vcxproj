@@ -139,15 +139,12 @@
   <ItemGroup>
     <ClCompile Include="blacklist.c" />
     <ClCompile Include="fuzz.c" />
-    <ClCompile Include="hde\hde64.c" />
+    <ClCompile Include="fuzz_param.c" />
     <ClCompile Include="log.c" />
     <ClCompile Include="main.c" />
     <ClCompile Include="minirtl\cmdline.c" />
     <ClCompile Include="minirtl\strtou64.c" />
     <ClCompile Include="minirtl\strtoul.c" />
-    <ClCompile Include="minirtl\u64tohex.c" />
-    <ClCompile Include="minirtl\u64tostr.c" />
-    <ClCompile Include="minirtl\ultohex.c" />
     <ClCompile Include="minirtl\ultostr.c" />
     <ClCompile Include="minirtl\_filename.c" />
     <ClCompile Include="minirtl\_strcat.c" />
@@ -156,26 +153,22 @@
     <ClCompile Include="minirtl\_strcpy.c" />
     <ClCompile Include="minirtl\_strend.c" />
     <ClCompile Include="minirtl\_strlen.c" />
-    <ClCompile Include="minirtl\_strncmp.c" />
     <ClCompile Include="minirtl\_strncpy.c" />
+    <ClCompile Include="minirtl\_strstr.c" />
     <ClCompile Include="sup.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="blacklist.h" />
     <ClInclude Include="fuzz.h" />
-    <ClInclude Include="hde\hde64.h" />
-    <ClInclude Include="hde\pstdint.h" />
-    <ClInclude Include="hde\table64.h" />
+    <ClInclude Include="fuzz_data.h" />
     <ClInclude Include="global.h" />
     <ClInclude Include="log.h" />
     <ClInclude Include="minirtl\cmdline.h" />
     <ClInclude Include="minirtl\minirtl.h" />
     <ClInclude Include="minirtl\rtltypes.h" />
     <ClInclude Include="minirtl\_filename.h" />
-    <ClInclude Include="ntbuilds.h" />
     <ClInclude Include="ntos.h" />
     <ClInclude Include="resource.h" />
-    <ClInclude Include="tables.h" />
     <ClInclude Include="sup.h" />
   </ItemGroup>
   <ItemGroup>

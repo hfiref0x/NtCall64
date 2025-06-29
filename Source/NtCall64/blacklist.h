@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016 - 2021
+*  (C) COPYRIGHT AUTHORS, 2016 - 2025
 *
 *  TITLE:       BLACKLIST.H
 *
-*  VERSION:     1.35
+*  VERSION:     2.00
 *
-*  DATE:        21 Feb 2021
+*  DATE:        27 Jun 2025
 *
 *  Syscall blacklist header file.
 *
@@ -19,21 +19,28 @@
 
 #pragma once
 
+#define BLACKLIST_HASH_TABLE_SIZE 256
+
 typedef struct _BL_ENTRY {
     LIST_ENTRY ListEntry;
     DWORD Hash;
+    PCHAR Name;
 } BL_ENTRY, * PBL_ENTRY;
 
 typedef struct _BLACKLIST {
     HANDLE HeapHandle;
     ULONG NumberOfEntries;
-    LIST_ENTRY ListHead;
+    LIST_ENTRY HashTable[BLACKLIST_HASH_TABLE_SIZE];
 } BLACKLIST, * PBLACKLIST;
 
 #define CFG_FILE    "badcalls.ini"
 
 DWORD BlackListHashString(
     _In_ LPCSTR Name);
+
+ULONG BlackListAddEntry(
+    _In_ BLACKLIST* BlackList,
+    _In_ LPCSTR SyscallName);
 
 BOOL BlackListCreateFromFile(
     _In_ BLACKLIST* BlackList,

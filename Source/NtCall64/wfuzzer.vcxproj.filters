@@ -13,11 +13,17 @@
       <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
       <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
     </Filter>
-    <Filter Include="hde">
-      <UniqueIdentifier>{380df33f-96ba-42ba-959c-0b631d9b0b24}</UniqueIdentifier>
-    </Filter>
     <Filter Include="minirtl">
       <UniqueIdentifier>{2f4e4843-4b3c-4e51-bf4e-27cd8e8dc260}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Fuzz">
+      <UniqueIdentifier>{f6213d23-109a-434d-b79e-332e95484d62}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Blacklist">
+      <UniqueIdentifier>{3f8772b7-faa0-4827-b199-2ef220adc2e0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Logger">
+      <UniqueIdentifier>{f34dea7e-67c7-414d-a0bc-2369125b8d61}</UniqueIdentifier>
     </Filter>
   </ItemGroup>
   <ItemGroup>
@@ -25,12 +31,6 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="sup.c">
-      <Filter>Source Files</Filter>
-    </ClCompile>
-    <ClCompile Include="hde\hde64.c">
-      <Filter>hde</Filter>
-    </ClCompile>
-    <ClCompile Include="fuzz.c">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="minirtl\_filename.c">
@@ -54,64 +54,46 @@
     <ClCompile Include="minirtl\_strlen.c">
       <Filter>minirtl</Filter>
     </ClCompile>
-    <ClCompile Include="minirtl\_strncmp.c">
-      <Filter>minirtl</Filter>
-    </ClCompile>
     <ClCompile Include="minirtl\_strncpy.c">
       <Filter>minirtl</Filter>
     </ClCompile>
     <ClCompile Include="minirtl\cmdline.c">
       <Filter>minirtl</Filter>
     </ClCompile>
-    <ClCompile Include="minirtl\strtou64.c">
-      <Filter>minirtl</Filter>
-    </ClCompile>
     <ClCompile Include="minirtl\strtoul.c">
-      <Filter>minirtl</Filter>
-    </ClCompile>
-    <ClCompile Include="minirtl\u64tohex.c">
-      <Filter>minirtl</Filter>
-    </ClCompile>
-    <ClCompile Include="minirtl\u64tostr.c">
-      <Filter>minirtl</Filter>
-    </ClCompile>
-    <ClCompile Include="minirtl\ultohex.c">
       <Filter>minirtl</Filter>
     </ClCompile>
     <ClCompile Include="minirtl\ultostr.c">
       <Filter>minirtl</Filter>
     </ClCompile>
+    <ClCompile Include="minirtl\_strstr.c">
+      <Filter>minirtl</Filter>
+    </ClCompile>
+    <ClCompile Include="minirtl\strtou64.c">
+      <Filter>minirtl</Filter>
+    </ClCompile>
+    <ClCompile Include="fuzz_param.c">
+      <Filter>Fuzz</Filter>
+    </ClCompile>
+    <ClCompile Include="fuzz.c">
+      <Filter>Fuzz</Filter>
+    </ClCompile>
     <ClCompile Include="blacklist.c">
-      <Filter>Source Files</Filter>
+      <Filter>Blacklist</Filter>
     </ClCompile>
     <ClCompile Include="log.c">
-      <Filter>Source Files</Filter>
+      <Filter>Logger</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ntos.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="fuzz.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="sup.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="tables.h">
       <Filter>Header Files</Filter>
     </ClInclude>
     <ClInclude Include="resource.h">
       <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="hde\hde64.h">
-      <Filter>hde</Filter>
-    </ClInclude>
-    <ClInclude Include="hde\pstdint.h">
-      <Filter>hde</Filter>
-    </ClInclude>
-    <ClInclude Include="hde\table64.h">
-      <Filter>hde</Filter>
     </ClInclude>
     <ClInclude Include="minirtl\minirtl.h">
       <Filter>minirtl</Filter>
@@ -125,27 +107,30 @@
     <ClInclude Include="minirtl\cmdline.h">
       <Filter>minirtl</Filter>
     </ClInclude>
-    <ClInclude Include="blacklist.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
-    <ClInclude Include="log.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
     <ClInclude Include="global.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="ntbuilds.h">
-      <Filter>Header Files</Filter>
+    <ClInclude Include="fuzz_data.h">
+      <Filter>Fuzz</Filter>
     </ClInclude>
-  </ItemGroup>
-  <ItemGroup>
-    <MASM Include="syscall.asm">
-      <Filter>Source Files</Filter>
-    </MASM>
+    <ClInclude Include="fuzz.h">
+      <Filter>Fuzz</Filter>
+    </ClInclude>
+    <ClInclude Include="blacklist.h">
+      <Filter>Blacklist</Filter>
+    </ClInclude>
+    <ClInclude Include="log.h">
+      <Filter>Logger</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="resource.rc">
       <Filter>Resource Files</Filter>
     </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <MASM Include="syscall.asm">
+      <Filter>Fuzz</Filter>
+    </MASM>
   </ItemGroup>
 </Project>
