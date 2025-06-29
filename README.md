@@ -4,7 +4,8 @@
 # NTCALL64
 ## Windows NT x64 syscall fuzzer
 
-NTCALL64 is a syscall fuzzer for 64-bit Windows NT 6+ (Windows 7 and later), based on the original [NtCall](http://gl00my.chat.ru/) by Peter Kosyh.  
+NTCALL64 is a syscall fuzzer for 64-bit Windows NT 6+ (Windows 7 and later), based on the original [NtCall](http://gl00my.chat.ru/) by Peter Kosyh.
+
 Its purpose is to port and extend the functionality of NtCall for x64 Windows, enabling researchers to fuzz system call tables (`ntoskrnl` and optionally `win32k`) for vulnerabilities and stability issues.
 
 ---
