@@ -110,7 +110,6 @@ NtUserSwitchDesktop
 NtUserWaitAvailableMessageEx
 NtUserWaitMessage
 ```
-The default config is included.
 
 ---
 
