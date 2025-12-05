@@ -4,9 +4,9 @@
 *
 *  TITLE:       SUP.H
 *
-*  VERSION:     2.00
+*  VERSION:     2.01
 *
-*  DATE:        27 Jun 2025
+*  DATE:        02 Dec 2025
 *
 * THIS CODE AND INFORMATION IS PROVIDED "AS IS" WITHOUT WARRANTY OF
 * ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED
@@ -69,6 +69,9 @@ ULONG supEnumWin32uServices(
     _In_ HANDLE HeapHandle,
     _In_ LPVOID ModuleBase,
     _Inout_ PWIN32_SHADOWTABLE* Table);
+
+VOID supFreeWin32ShadowTable(
+    _In_ PWIN32_SHADOWTABLE ShadowTable);
 
 NTSTATUS supMapImageNoExecute(
     _In_ PUNICODE_STRING ImagePath,

@@ -4,9 +4,9 @@
 *
 *  TITLE:       FUZZ_DATA.H
 *
-*  VERSION:     2.00
+*  VERSION:     2.01
 *
-*  DATE:        27 Jun 2025
+*  DATE:        02 Dec 2025
 *
 *  Fuzzing data constants and Windows syscall database.
 *
@@ -212,8 +212,8 @@ const SYSCALL_PARAM_INFO KnownNtSyscalls[] = {
     {"NtCreateIoCompletion", {ParamTypeAddress, ParamTypeAccess, ParamTypeObjectAttr, ParamTypeFlag}},
     {"NtCreateIRTimer", {ParamTypeAddress, ParamTypeAccess}},
     {"NtCreateKey", {ParamTypeAddress, ParamTypeAccess, ParamTypeObjectAttr, ParamTypeFlag, ParamTypeUnicodeStr, ParamTypeFlag, ParamTypeAddress}},
-    {"NtCreateKeyTransacted", {ParamTypeAddress, ParamTypeAccess, ParamTypeObjectAttr, ParamTypeFlag, ParamTypeUnicodeStr, ParamTypeFlag, ParamTypeHandle, ParamTypeAddress}},
     {"NtCreateKeyedEvent", {ParamTypeAddress, ParamTypeAccess, ParamTypeObjectAttr, ParamTypeFlag}},
+    {"NtCreateKeyTransacted", {ParamTypeAddress, ParamTypeAccess, ParamTypeObjectAttr, ParamTypeFlag, ParamTypeUnicodeStr, ParamTypeFlag, ParamTypeHandle, ParamTypeAddress}},
     {"NtCreateMailslotFile", {ParamTypeAddress, ParamTypeAccess, ParamTypeObjectAttr, ParamTypeStatus, ParamTypeFlag, ParamTypeFlag, ParamTypeFlag, ParamTypeAddress}},
     {"NtCreateMutant", {ParamTypeAddress, ParamTypeAccess, ParamTypeObjectAttr, ParamTypeFlag}},
     {"NtCreateNamedPipeFile", {ParamTypeAddress, ParamTypeAccess, ParamTypeObjectAttr, ParamTypeStatus, ParamTypeFlag, ParamTypeFlag, ParamTypeFlag, ParamTypeFlag, ParamTypeFlag, ParamTypeFlag, ParamTypeFlag, ParamTypeFlag, ParamTypeFlag, ParamTypeAddress}},
@@ -295,8 +295,8 @@ const SYSCALL_PARAM_INFO KnownNtSyscalls[] = {
     {"NtLockProductActivationKeys", {ParamTypeAddress, ParamTypeAddress}},
     {"NtLockRegistryKey", {ParamTypeHandle}},
     {"NtLockVirtualMemory", {ParamTypeHandle, ParamTypeAddress, ParamTypeAddress, ParamTypeFlag}},
-    {"NtMakeTemporaryObject", {ParamTypeHandle}},
     {"NtMakePermanentObject", {ParamTypeHandle}},
+    {"NtMakeTemporaryObject", {ParamTypeHandle}},
     {"NtMapCMFModule", {ParamTypeFlag, ParamTypeFlag, ParamTypeAddress, ParamTypeAddress, ParamTypeAddress, ParamTypeAddress}},
     {"NtMapUserPhysicalPages", {ParamTypeAddress, ParamTypeAddress, ParamTypeAddress}},
     {"NtMapUserPhysicalPagesScatter", {ParamTypeAddress, ParamTypeAddress, ParamTypeAddress}},
@@ -311,10 +311,10 @@ const SYSCALL_PARAM_INFO KnownNtSyscalls[] = {
     {"NtOpenFile", {ParamTypeAddress, ParamTypeAccess, ParamTypeObjectAttr, ParamTypeStatus, ParamTypeFlag, ParamTypeFlag}},
     {"NtOpenIoCompletion", {ParamTypeAddress, ParamTypeAccess, ParamTypeObjectAttr}},
     {"NtOpenKey", {ParamTypeAddress, ParamTypeAccess, ParamTypeObjectAttr}},
+    {"NtOpenKeyedEvent", {ParamTypeAddress, ParamTypeAccess, ParamTypeObjectAttr}},
     {"NtOpenKeyEx", {ParamTypeAddress, ParamTypeAccess, ParamTypeObjectAttr, ParamTypeFlag}},
     {"NtOpenKeyTransacted", {ParamTypeAddress, ParamTypeAccess, ParamTypeObjectAttr, ParamTypeHandle}},
     {"NtOpenKeyTransactedEx", {ParamTypeAddress, ParamTypeAccess, ParamTypeObjectAttr, ParamTypeFlag, ParamTypeHandle}},
-    {"NtOpenKeyedEvent", {ParamTypeAddress, ParamTypeAccess, ParamTypeObjectAttr}},
     {"NtOpenMutant", {ParamTypeAddress, ParamTypeAccess, ParamTypeObjectAttr}},
     {"NtOpenObjectAuditAlarm", {ParamTypeUnicodeStr, ParamTypeAddress, ParamTypeUnicodeStr, ParamTypeUnicodeStr, ParamTypeAddress, ParamTypeAddress, ParamTypeHandle, ParamTypeAccess, ParamTypeAccess, ParamTypeAddress, ParamTypeFlag, ParamTypeFlag}},
     {"NtOpenPartition", {ParamTypeAddress, ParamTypeAccess, ParamTypeObjectAttr}},
@@ -336,10 +336,10 @@ const SYSCALL_PARAM_INFO KnownNtSyscalls[] = {
     {"NtOpenTransactionManager", {ParamTypeAddress, ParamTypeAccess, ParamTypeObjectAttr, ParamTypeUnicodeStr, ParamTypeObjectAttr, ParamTypeFlag}},
     {"NtPlugPlayControl", {ParamTypeFlag, ParamTypeAddress, ParamTypeFlag}},
     {"NtPowerInformation", {ParamTypeFlag, ParamTypeAddress, ParamTypeBufferSize, ParamTypeAddress, ParamTypeBufferSize}},
-    {"NtPrePrepareComplete", {ParamTypeHandle, ParamTypeAddress}},
-    {"NtPrePrepareEnlistment", {ParamTypeHandle, ParamTypeAddress}},
     {"NtPrepareComplete", {ParamTypeHandle, ParamTypeAddress}},
     {"NtPrepareEnlistment", {ParamTypeHandle, ParamTypeAddress}},
+    {"NtPrePrepareComplete", {ParamTypeHandle, ParamTypeAddress}},
+    {"NtPrePrepareEnlistment", {ParamTypeHandle, ParamTypeAddress}},
     {"NtPropagationComplete", {ParamTypeHandle, ParamTypeFlag, ParamTypeFlag, ParamTypeAddress}},
     {"NtPropagationFailed", {ParamTypeHandle, ParamTypeFlag, ParamTypeStatus}},
     {"NtPulseEvent", {ParamTypeHandle, ParamTypeAddress}},
@@ -503,7 +503,6 @@ const SYSCALL_PARAM_INFO KnownNtSyscalls[] = {
     {"NtWriteVirtualMemory", {ParamTypeHandle, ParamTypeAddress, ParamTypeAddress, ParamTypeFlag, ParamTypeAddress}},
     {"NtYieldExecution", {0}},
 
-    // Terminator
     {NULL, {0}}
 };
 
@@ -596,7 +595,7 @@ const SYSCALL_PARAM_INFO KnownWin32kSyscalls[] = {
     {"NtUserCreateDesktop", {ParamTypeUnicodeStr, ParamTypeUnicodeStr, ParamTypeAddress, ParamTypeFlag, ParamTypeAccess, ParamTypeFlag}},
     {"NtUserCreateIconIndirect", {ParamTypeAddress}},
     {"NtUserCreateMenu", {0}},
-    {"NtUserCreateWindowEx", {ParamTypeFlag, ParamTypeUnicodeStr, ParamTypeUnicodeStr, ParamTypeFlag, ParamTypeFlag, ParamTypeFlag, ParamTypeFlag, ParamTypeWinHandle, ParamTypeHandle, ParamTypeHandle, ParamTypeAddress}},
+    {"NtUserCreateWindowEx", {ParamTypeFlag, ParamTypeUnicodeStr, ParamTypeUnicodeStr, ParamTypeFlag, ParamTypeFlag, ParamTypeFlag, ParamTypeFlag, ParamTypeWinHandle, ParamTypeHandle, ParamTypeHandle, ParamTypeAddress, ParamTypeFlag}},
     {"NtUserCreateWindowStation", {ParamTypeObjectAttr, ParamTypeAccess, ParamTypeHandle, ParamTypeAddress, ParamTypeAddress, ParamTypeAddress, ParamTypeAddress, ParamTypeFlag}},
     {"NtUserDefWindowProc", {ParamTypeWinHandle, ParamTypeFlag, ParamTypeFlag, ParamTypeFlag}},
     {"NtUserDeleteMenu", {ParamTypeHandle, ParamTypeFlag, ParamTypeFlag}},
@@ -622,20 +621,20 @@ const SYSCALL_PARAM_INFO KnownWin32kSyscalls[] = {
     {"NtUserGetCaretBlinkTime", {0}},
     {"NtUserGetCaretPos", {ParamTypeAddress}},
     {"NtUserGetClassName", {ParamTypeWinHandle, ParamTypeFlag, ParamTypeUnicodeStr}},
-    {"NtUserGetClipCursor", {ParamTypeAddress}},
     {"NtUserGetClipboardData", {ParamTypeFlag, ParamTypeAddress}},
     {"NtUserGetClipboardFormatName", {ParamTypeFlag, ParamTypeAddress, ParamTypeFlag}},
+    {"NtUserGetClipCursor", {ParamTypeAddress}},
     {"NtUserGetComboBoxInfo", {ParamTypeWinHandle, ParamTypeAddress}},
+    {"NtUserGetCurrentInputMessageSource", {ParamTypeAddress}},
     {"NtUserGetCursorInfo", {ParamTypeAddress}},
     {"NtUserGetCursorPos", {ParamTypeAddress}},
-    {"NtUserGetCurrentInputMessageSource", {ParamTypeAddress}},
     {"NtUserGetDC", {ParamTypeWinHandle}},
     {"NtUserGetDCEx", {ParamTypeWinHandle, ParamTypeHandle, ParamTypeFlag}},
     {"NtUserGetDisplayAutoRotationPreferences", {ParamTypeAddress}},
     {"NtUserGetDoubleClickTime", {0}},
     {"NtUserGetForegroundWindow", {0}},
-    {"NtUserGetGUIThreadInfo", {ParamTypeFlag, ParamTypeAddress}},
     {"NtUserGetGuiResources", {ParamTypeHandle, ParamTypeFlag}},
+    {"NtUserGetGUIThreadInfo", {ParamTypeFlag, ParamTypeAddress}},
     {"NtUserGetIconInfo", {ParamTypeHandle, ParamTypeAddress, ParamTypeUnicodeStr, ParamTypeUnicodeStr, ParamTypeAddress, ParamTypeFlag}},
     {"NtUserGetIconSize", {ParamTypeHandle, ParamTypeFlag, ParamTypeAddress, ParamTypeAddress}},
     {"NtUserGetKeyState", {ParamTypeFlag}},
@@ -750,3 +749,6 @@ const SYSCALL_PARAM_INFO KnownWin32kSyscalls[] = {
     // Terminator
     {NULL, {0}}
 };
+
+#define KNOWN_NT_SYSCALLS_COUNT     (sizeof(KnownNtSyscalls) / sizeof(KnownNtSyscalls[0]) - 1)
+#define KNOWN_WIN32K_SYSCALLS_COUNT (sizeof(KnownWin32kSyscalls) / sizeof(KnownWin32kSyscalls[0]) - 1)

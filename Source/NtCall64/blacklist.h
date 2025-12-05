@@ -4,9 +4,9 @@
 *
 *  TITLE:       BLACKLIST.H
 *
-*  VERSION:     2.00
+*  VERSION:     2.01
 *
-*  DATE:        27 Jun 2025
+*  DATE:        02 Dec 2025
 *
 *  Syscall blacklist header file.
 *
@@ -20,6 +20,7 @@
 #pragma once
 
 #define BLACKLIST_HASH_TABLE_SIZE 256
+#define BLACKLIST_HASH_MASK (BLACKLIST_HASH_TABLE_SIZE - 1)
 
 typedef struct _BL_ENTRY {
     LIST_ENTRY ListEntry;

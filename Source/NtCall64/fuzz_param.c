@@ -4,9 +4,9 @@
 *
 *  TITLE:       FUZZ_PARAM.C
 *
-*  VERSION:     2.00
+*  VERSION:     2.01
 *
-*  DATE:        27 Jun 2025
+*  DATE:        02 Dec 2025
 *
 *  Parameter type detection and structure generation for syscall fuzzing.
 *
@@ -20,7 +20,27 @@
 #include "global.h"
 #include "fuzz_data.h"
 
-FUZZ_MEMORY_TRACKER g_MemoryTracker;
+__declspec(thread) FUZZ_MEMORY_TRACKER g_MemoryTracker;
+
+#ifdef _DEBUG
+BOOL VerifySyscallDatabaseSorted(UINT DbType)
+{
+    SYSCALL_PARAM_INFO* Database = (DbType == 0) ? KnownNtSyscalls : KnownWin32kSyscalls;
+    SYSCALL_PARAM_INFO* prev = Database;
+    SYSCALL_PARAM_INFO* curr = Database + 1;
+
+    while (curr->Name != NULL) {
+        if (_strcmpi_a(prev->Name, curr->Name) > 0) {
+            OutputDebugStringA(prev->Name);
+            OutputDebugStringA("\n\r");
+            return FALSE;
+        }
+        prev = curr;
+        curr++;
+    }
+    return TRUE;
+}
+#endif
 
 /*
 * FuzzTrackAllocation
@@ -38,11 +58,17 @@ VOID FuzzTrackAllocation(
     if (Address == NULL)
         return;
 
+    while (InterlockedCompareExchange(&g_MemoryTracker.Lock, 1, 0) != 0) {
+        YieldProcessor();
+    }
+
     if (g_MemoryTracker.Count < MAX_FUZZING_ALLOCATIONS) {
         g_MemoryTracker.Addresses[g_MemoryTracker.Count] = Address;
         g_MemoryTracker.Types[g_MemoryTracker.Count] = Type;
         g_MemoryTracker.Count++;
     }
+
+    InterlockedExchange(&g_MemoryTracker.Lock, 0);
 }
 /*
 * FuzzCleanupAllocations
@@ -57,8 +83,14 @@ VOID FuzzCleanupAllocations()
 {
     ULONG i;
 
-    if (!g_MemoryTracker.InUse)
+    while (InterlockedCompareExchange(&g_MemoryTracker.Lock, 1, 0) != 0) {
+        YieldProcessor();
+    }
+
+    if (!g_MemoryTracker.InUse) {
+        InterlockedExchange(&g_MemoryTracker.Lock, 0);
         return;
+    }
 
     for (i = 0; i < g_MemoryTracker.Count; i++) {
         if (g_MemoryTracker.Addresses[i] != NULL) {
@@ -75,10 +107,12 @@ VOID FuzzCleanupAllocations()
     }
     g_MemoryTracker.Count = 0;
     g_MemoryTracker.InUse = FALSE;
+
+    InterlockedExchange(&g_MemoryTracker.Lock, 0);
 }
 
 /*
-* SyscallBinarySearch
+* FuzzSyscallBinarySearch
 *
 * Purpose:
 *
@@ -88,17 +122,13 @@ VOID FuzzCleanupAllocations()
 PARAM_TYPE_HINT FuzzSyscallBinarySearch(
     _In_ LPCSTR SyscallName,
     _In_ ULONG ParamIndex,
-    _In_ const SYSCALL_PARAM_INFO* Database
+    _In_ const SYSCALL_PARAM_INFO* Database,
+    _In_ ULONG DatabaseCount
 )
 {
     int left = 0;
-    int right = 0;
+    int right = (int)DatabaseCount - 1;
     int mid, result;
-
-    while (Database[right].Name != NULL) {
-        right++;
-    }
-    right--;
 
     while (left <= right) {
         mid = left + ((right - left) / 2);
@@ -133,17 +163,23 @@ PARAM_TYPE_HINT FuzzGetSyscallParamType(
 )
 {
     const SYSCALL_PARAM_INFO* pDatabase;
+    ULONG databaseCount;
     PARAM_TYPE_HINT result;
 
     if (!SyscallName || ParamIndex >= 16)
         return ParamTypeGeneral;
 
-    pDatabase = IsWin32kSyscall ? KnownWin32kSyscalls : KnownNtSyscalls;
+    if (IsWin32kSyscall) {
+        pDatabase = KnownWin32kSyscalls;
+        databaseCount = KNOWN_WIN32K_SYSCALLS_COUNT;
+    }
+    else {
+        pDatabase = KnownNtSyscalls;
+        databaseCount = KNOWN_NT_SYSCALLS_COUNT;
+    }
 
-    // Search in known syscalls database using binary search
-    result = FuzzSyscallBinarySearch(SyscallName, ParamIndex, pDatabase);
+    result = FuzzSyscallBinarySearch(SyscallName, ParamIndex, pDatabase, databaseCount);
 
-    // If not found using binary search, use heuristic approach
     if (result == ParamTypeGeneral) {
         return FuzzDetermineParameterTypeHeuristic(SyscallName, ParamIndex, IsWin32kSyscall);
     }
@@ -508,13 +544,18 @@ ULONG_PTR FuzzGenerateParameter(
         return FuzzAccessData[__rdtsc() % FUZZACCESS_COUNT];
 
     case ParamTypeFlag:
-        // Bit flags with 1-3 random bits set
         if (variation < 15) {
             ULONG numBits = (__rdtsc() % 3) + 1;
             ULONG_PTR result = 0;
+            ULONG usedBits = 0;
+            ULONG bit;
 
             for (ULONG i = 0; i < numBits; i++) {
-                result |= (1ULL << (__rdtsc() % 32));
+                do {
+                    bit = __rdtsc() % 32;
+                } while (usedBits & (1 << bit));
+                usedBits |= (1 << bit);
+                result |= (1ULL << bit);
             }
 
             return result;

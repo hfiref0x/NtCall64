@@ -4,9 +4,9 @@
 *
 *  TITLE:       GLOBAL.H
 *
-*  VERSION:     2.00
+*  VERSION:     2.01
 *
-*  DATE:        27 Jun 2025
+*  DATE:        02 Dec 2025
 *
 *  Global definitions.
 *
@@ -95,6 +95,7 @@ typedef struct _NTCALL_CONTEXT {
     PVOID NtdllBase;
     PVOID SystemModuleBase;
     PCHAR *Win32pServiceTableNames;
+    PWIN32_SHADOWTABLE Win32ShadowTable;
     RAW_SERVICE_TABLE ServiceTable;
     BLACKLIST BlackList;
     RTL_OSVERSIONINFOW OsVersion;
@@ -123,6 +124,7 @@ typedef enum _FUZZ_ALLOC_TYPE {
 
 #define MAX_FUZZING_ALLOCATIONS 32
 typedef struct _FUZZ_MEMORY_TRACKER {
+    volatile LONG Lock;
     ULONG Count;
     PVOID Addresses[MAX_FUZZING_ALLOCATIONS];
     FUZZ_ALLOC_TYPE Types[MAX_FUZZING_ALLOCATIONS];
@@ -131,6 +133,6 @@ typedef struct _FUZZ_MEMORY_TRACKER {
 
 extern NTCALL_CONTEXT g_ctx;
 extern NTCALL_LOG_PARAMS g_Log;
-extern FUZZ_MEMORY_TRACKER g_MemoryTracker;
+extern __declspec(thread) FUZZ_MEMORY_TRACKER g_MemoryTracker;
 
 #include "fuzz.h"

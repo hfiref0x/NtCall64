@@ -4,9 +4,9 @@
 *
 *  TITLE:       SUP.C
 *
-*  VERSION:     2.00
+*  VERSION:     2.01
 *
-*  DATE:        27 Jun 2025
+*  DATE:        02 Dec 2025
 *
 *  Support routines.
 *
@@ -19,6 +19,8 @@
 
 #include "global.h"
 
+static HANDLE g_hConsoleOutput = INVALID_HANDLE_VALUE;
+
 BOOL ConsoleInit(
     VOID)
 {
@@ -26,30 +28,31 @@ BOOL ConsoleInit(
     DWORD cCharsWritten;
     CONSOLE_SCREEN_BUFFER_INFO csbi;
     DWORD dwConSize;
-    HANDLE hConsole = GetStdHandle(STD_OUTPUT_HANDLE);
 
-    if (hConsole == INVALID_HANDLE_VALUE)
+    g_hConsoleOutput = GetStdHandle(STD_OUTPUT_HANDLE);
+
+    if (g_hConsoleOutput == INVALID_HANDLE_VALUE)
         return FALSE;
 
-    if (!GetConsoleScreenBufferInfo(hConsole, &csbi))
+    if (!GetConsoleScreenBufferInfo(g_hConsoleOutput, &csbi))
         return FALSE;
 
-    SetConsoleTextAttribute(hConsole, FOREGROUND_BLUE | FOREGROUND_GREEN | FOREGROUND_RED);
+    SetConsoleTextAttribute(g_hConsoleOutput, FOREGROUND_BLUE | FOREGROUND_GREEN | FOREGROUND_RED);
 
     dwConSize = csbi.dwSize.X * csbi.dwSize.Y;
 
-    if (!FillConsoleOutputCharacter(hConsole, (TCHAR)' ',
+    if (!FillConsoleOutputCharacter(g_hConsoleOutput, (TCHAR)' ',
         dwConSize, coordScreen, &cCharsWritten))
         return FALSE;
 
-    if (!GetConsoleScreenBufferInfo(hConsole, &csbi))
+    if (!GetConsoleScreenBufferInfo(g_hConsoleOutput, &csbi))
         return FALSE;
 
-    if (!FillConsoleOutputAttribute(hConsole, csbi.wAttributes,
+    if (!FillConsoleOutputAttribute(g_hConsoleOutput, csbi.wAttributes,
         dwConSize, coordScreen, &cCharsWritten))
         return FALSE;
 
-    SetConsoleCursorPosition(hConsole, coordScreen);
+    SetConsoleCursorPosition(g_hConsoleOutput, coordScreen);
 
     return TRUE;
 }
@@ -70,7 +73,7 @@ VOID ConsoleShowMessage2(
     CONSOLE_SCREEN_BUFFER_INFO csbi;
     ULONG r, sz;
     WORD SavedAttributes = 0;
-    HANDLE hStdHandle = GetStdHandle(STD_OUTPUT_HANDLE);
+    HANDLE hStdHandle = g_hConsoleOutput;
     BOOL isCarriageReturn = FALSE;
     LPSTR lpClearBuffer = NULL;
     DWORD clearBufferSize;
@@ -131,8 +134,11 @@ VOID ConsoleShowMessage(
     CONSOLE_SCREEN_BUFFER_INFO csbi;
     ULONG r, sz;
     WORD SavedAttributes = 0;
-    HANDLE hStdHandle = GetStdHandle(STD_OUTPUT_HANDLE);
+    HANDLE hStdHandle = g_hConsoleOutput;
     LPCSTR szNewLine = "\r\n";
+
+    if (hStdHandle == INVALID_HANDLE_VALUE)
+        return;
 
     sz = (DWORD)_strlen_a(lpMessage);
     if (sz == 0)
@@ -430,6 +436,28 @@ ULONG supEnumWin32uServices(
 }
 
 /*
+* supFreeWin32ShadowTable
+*
+* Purpose:
+*
+* Free allocated shadow table linked list.
+*
+*/
+VOID supFreeWin32ShadowTable(
+    _In_ PWIN32_SHADOWTABLE ShadowTable
+)
+{
+    PWIN32_SHADOWTABLE Current, Next;
+
+    Current = ShadowTable;
+    while (Current) {
+        Next = Current->NextService;
+        HeapFree(GetProcessHeap(), 0, Current);
+        Current = Next;
+    }
+}
+
+/*
 * supPrivilegeEnabled
 *
 * Purpose:
@@ -498,6 +526,10 @@ PSID supQueryTokenUserSid(
                 result = supHeapAlloc(Length);
                 if (result) {
                     status = RtlCopySid(Length, result, ptu->User.Sid);
+                    if (!NT_SUCCESS(status)) {
+                        supHeapFree(result);
+                        result = NULL;
+                    }
                 }
             }
 
@@ -1376,31 +1408,38 @@ BOOL supIsComPort(
     _In_ LPCWSTR wsz
 )
 {
+    int i, portNum;
+
     if (!wsz)
         return FALSE;
 
-    if ((wsz[0] == L'C' || wsz[0] == L'c') &&
-        (wsz[1] == L'O' || wsz[1] == L'o') &&
-        (wsz[2] == L'M' || wsz[2] == L'm'))
+    if ((wsz[0] != L'C' && wsz[0] != L'c') ||
+        (wsz[1] != L'O' && wsz[1] != L'o') ||
+        (wsz[2] != L'M' && wsz[2] != L'm'))
     {
-        int i = 3;
-        int portNum = 0;
-
-        if (wsz[i] == L'\0')
-            return FALSE;
-
-        while (wsz[i] && (i - 3) < 3) {
-            if (wsz[i] < L'0' || wsz[i] > L'9')
-                return FALSE;
-            portNum = portNum * 10 + (wsz[i] - L'0');
-            i++;
-        }
-
-        if (wsz[i] != L'\0')
-            return FALSE;
-
-        if (portNum >= 1 && portNum <= 255)
-            return TRUE;
+        return FALSE;
     }
-    return FALSE;
+
+    i = 3;
+    portNum = 0;
+
+    if (wsz[i] == L'\0')
+        return FALSE;
+
+    while (wsz[i] != L'\0') {
+        if (wsz[i] < L'0' || wsz[i] > L'9')
+            return FALSE;
+
+        portNum = portNum * 10 + (wsz[i] - L'0');
+
+        if (portNum > 255)
+            return FALSE;
+
+        i++;
+
+        if (i > 6)
+            return FALSE;
+    }
+
+    return (portNum >= 1 && portNum <= 255);
 }

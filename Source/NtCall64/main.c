@@ -34,7 +34,7 @@
 #define DEFAULT_LOG_FILE    TEXT("ntcall64.log")
 
 #define WELCOME_BANNER      "Windows NT x64 syscall fuzzer, based on NtCall by Peter Kosyh."
-#define VERSION_BANNER      "Version 2.0.0 from 27 Jun 2025\r\n"
+#define VERSION_BANNER      "Version 2.0.1 from 02 Dec 2025\r\n"
 #define PSEUDO_GRAPHICS_BANNER "\
  _   _ _____ _____   ___   _      _       ____    ___ \n\
 | \\ | |_   _/  __ \\ / _ \\ | |    | |     / ___|  /   |\n\
@@ -351,6 +351,9 @@ UINT FuzzInitPhase1(
     if (g_ctx.Win32pServiceTableNames)
         supHeapFree(g_ctx.Win32pServiceTableNames);
 
+    if (g_ctx.Win32ShadowTable)
+        supFreeWin32ShadowTable(g_ctx.Win32ShadowTable);
+
     ConsoleShowMessage("[-] Leaving FuzzInitPhase1()", TEXT_COLOR_CYAN);
 
     return result;
@@ -563,6 +566,19 @@ UINT NtCall64Main()
     ConsoleShowMessage(PSEUDO_GRAPHICS_BANNER, TEXT_COLOR_CYAN);
     ConsoleShowMessage(WELCOME_BANNER, TEXT_COLOR_CYAN);
     ConsoleShowMessage(VERSION_BANNER, TEXT_COLOR_CYAN);
+
+#ifdef _DEBUG
+    if (VerifySyscallDatabaseSorted(0))
+        DbgPrint("KnownNtSyscalls OK\n");
+    else
+        DbgPrint("KnownNtSyscalls BAD\n");
+
+    if (VerifySyscallDatabaseSorted(1))
+        DbgPrint("KnownWin32kSyscalls OK\n");
+    else 
+        DbgPrint("KnownWin32kSyscalls BAD\n");
+
+#endif
 
     ExceptionHandler = RtlAddVectoredExceptionHandler(1, &VehHandler);
     if (ExceptionHandler) {

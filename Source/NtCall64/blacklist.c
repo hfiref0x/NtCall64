@@ -4,9 +4,9 @@
 *
 *  TITLE:       BLACKLIST.C
 *
-*  VERSION:     2.00
+*  VERSION:     2.01
 *
-*  DATE:        27 Jun 2025
+*  DATE:        02 Dec 2025
 *
 *  Syscall blacklist handling.
 *
@@ -18,9 +18,6 @@
 *******************************************************************************/
 
 #include "global.h"
-
-#define BLACKLIST_HASH_TABLE_SIZE 256
-#define BLACKLIST_HASH_MASK (BLACKLIST_HASH_TABLE_SIZE - 1)
 
 /*
 * BlackListHashString
@@ -72,15 +69,16 @@ ULONG BlackListAddEntry(
         sizeof(BL_ENTRY) + Length
     );
 
-    if (Entry) {
-        Entry->Hash = Hash;
-
-        Entry->Name = (PCHAR)(Entry + 1);
-        _strncpy_a((char*)Entry->Name, Length, SyscallName, Length - 1);
-
-        InsertHeadList(&BlackList->HashTable[BucketIndex], &Entry->ListEntry);
-        BlackList->NumberOfEntries += 1;
+    if (Entry == NULL) {
+        return 0;
     }
+
+    Entry->Hash = Hash;
+    Entry->Name = (PCHAR)(Entry + 1);
+    _strncpy_a((char*)Entry->Name, Length, SyscallName, Length - 1);
+
+    InsertHeadList(&BlackList->HashTable[BucketIndex], &Entry->ListEntry);
+    BlackList->NumberOfEntries += 1;
 
     return Length;
 }
@@ -140,6 +138,9 @@ BOOL BlackListCreateFromFile(
 
         while (BytesRead < SectionSize && *SectionPtr) {
             Length = BlackListAddEntry(BlackList, SectionPtr);
+            if (Length == 0) {
+                break;
+            }
             BytesRead += Length;
             SectionPtr += Length;
         }

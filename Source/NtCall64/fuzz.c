@@ -4,9 +4,9 @@
 *
 *  TITLE:       FUZZ.C
 *
-*  VERSION:     2.00
+*  VERSION:     2.01
 *
-*  DATE:        27 Jun 2025
+*  DATE:        02 Dec 2025
 *
 *  Fuzzing routines.
 *
@@ -146,48 +146,65 @@ BOOLEAN FuzzLookupWin32kNames(
     _Inout_ NTCALL_CONTEXT* Context
 )
 {
+    BOOLEAN result = FALSE;
     ULONG i;
-    PRAW_SERVICE_TABLE ServiceTable = &Context->ServiceTable;
-    PCHAR* lpServiceNames;
-
+    PRAW_SERVICE_TABLE serviceTable;
+    PCHAR* win32pServiceTableNames = NULL;
     HMODULE win32u = NULL;
     ULONG win32uLimit;
-    PWIN32_SHADOWTABLE ShadowTable = NULL;
-
+    PWIN32_SHADOWTABLE shadowTable = NULL;
     PCHAR serviceName;
 
-    if (ServiceTable->CountOfEntries == 0 || ServiceTable->CountOfEntries > MAX_SYSCALL_COUNT)
-        return FALSE;
+    serviceTable = &Context->ServiceTable;
 
-    win32u = GetModuleHandle(WIN32U_DLL);
-    if (win32u == NULL) {
-        win32u = LoadLibrary(WIN32U_DLL);
-        if (win32u == NULL) {
-            ConsoleShowMessage("[!] Failed to load win32u.dll.", TEXT_COLOR_RED);
-            return FALSE;
+    do {
+
+        if (serviceTable->CountOfEntries == 0 || serviceTable->CountOfEntries > MAX_SYSCALL_COUNT) {
+            ConsoleShowMessage("[! ] Invalid service table count of entries.", TEXT_COLOR_RED);
+            break;
         }
+
+        win32u = GetModuleHandle(WIN32U_DLL);
+        if (win32u == NULL) {
+            win32u = LoadLibrary(WIN32U_DLL);
+            if (win32u == NULL) {
+                ConsoleShowMessage("[!] Failed to load win32u.dll.", TEXT_COLOR_RED);
+                break;
+            }
+        }
+
+        win32pServiceTableNames = (PCHAR*)supHeapAlloc(serviceTable->CountOfEntries * sizeof(PCHAR));
+        if (win32pServiceTableNames == NULL) {
+            ConsoleShowMessage("[!] Unable to allocate service names array.", TEXT_COLOR_RED);
+            break;
+        }
+
+        win32uLimit = supEnumWin32uServices(GetProcessHeap(), (LPVOID)win32u, &shadowTable);
+        if (win32uLimit != serviceTable->CountOfEntries || shadowTable == NULL) {
+            ConsoleShowMessage("[!] Win32u services enumeration failed.", TEXT_COLOR_RED);
+            break;
+        }
+
+        for (i = 0; i < serviceTable->CountOfEntries; i++) {
+            serviceName = supResolveW32kServiceNameById(i + W32SYSCALLSTART, shadowTable);
+            win32pServiceTableNames[i] = (serviceName != NULL) ? serviceName : "UnknownServiceName";
+        }
+
+        Context->Win32pServiceTableNames = win32pServiceTableNames;
+        Context->Win32ShadowTable = shadowTable;
+
+        result = TRUE;
+
+    } while (FALSE);
+
+    if (!result) {
+        if (win32pServiceTableNames)
+            supHeapFree(win32pServiceTableNames);
+        if (shadowTable)
+            supFreeWin32ShadowTable(shadowTable);
     }
 
-    lpServiceNames = (CHAR**)supHeapAlloc(ServiceTable->CountOfEntries * sizeof(PCHAR));
-    if (lpServiceNames == NULL)
-        return FALSE;
-
-    win32uLimit = supEnumWin32uServices(GetProcessHeap(), (LPVOID)win32u, &ShadowTable);
-
-    if (win32uLimit != ServiceTable->CountOfEntries || ShadowTable == NULL) {
-        ConsoleShowMessage("[!] Win32u services enumeration failed.", TEXT_COLOR_RED);
-        supHeapFree(lpServiceNames);
-        return FALSE;
-    }
-
-    Context->Win32pServiceTableNames = lpServiceNames;
-
-    for (i = 0; i < ServiceTable->CountOfEntries; i++) {
-        serviceName = supResolveW32kServiceNameById(i + W32SYSCALLSTART, ShadowTable);
-        lpServiceNames[i] = (serviceName != NULL) ? serviceName : "UnknownServiceName";
-    }
-
-    return TRUE;
+    return result;
 }
 
 /*
@@ -409,11 +426,11 @@ VOID FuzzRun(
         "Crashed calls: %lu\r\n"\
         "Timed out calls: %lu\r\n"\
         "Total calls: %lu\r\n----FuzzRun statistics----\r\n",
-        g_FuzzStats.SuccessCalls,
-        g_FuzzStats.ErrorCalls,
-        g_FuzzStats.CrashedCalls,
-        g_FuzzStats.TimeoutCalls,
-        g_FuzzStats.TotalCalls);
+        InterlockedCompareExchange((PLONG)&g_FuzzStats.SuccessCalls, 0, 0),
+        InterlockedCompareExchange((PLONG)&g_FuzzStats.ErrorCalls, 0, 0),
+        InterlockedCompareExchange((PLONG)&g_FuzzStats.CrashedCalls, 0, 0),
+        InterlockedCompareExchange((PLONG)&g_FuzzStats.TimeoutCalls, 0, 0),
+        InterlockedCompareExchange((PLONG)&g_FuzzStats.TotalCalls, 0, 0));
 
     ConsoleShowMessage2(szOut, 0);
 

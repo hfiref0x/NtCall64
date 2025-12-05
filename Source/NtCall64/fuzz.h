@@ -99,6 +99,10 @@ VOID FuzzTrackAllocation(
 
 VOID FuzzCleanupAllocations();
 
+#ifdef _DEBUG
+BOOL VerifySyscallDatabaseSorted(UINT DbType);
+#endif
+
 PSECURITY_DESCRIPTOR CreateFuzzedSecurityDescriptor(_In_ BYTE* FuzzStructBuffer);
 PUNICODE_STRING CreateFuzzedUnicodeString(_In_ BYTE* FuzzStructBuffer);
 POBJECT_ATTRIBUTES CreateFuzzedObjectAttributes(_In_ BYTE* FuzzStructBuffer);
