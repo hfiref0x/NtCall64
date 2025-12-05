@@ -8,4 +8,4 @@ platform: x64
 clone_folder: c:\projects\ntcall64
 
 build_script:
-  - msbuild Source/NtCall64. sln /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v143
+  - msbuild Source/NtCall64.sln /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v143
