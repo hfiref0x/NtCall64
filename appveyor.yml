@@ -6,6 +6,6 @@ image: Visual Studio 2022
 configuration: Release
 platform: x64
 clone_folder: c:\projects\ntcall64
-build:
-  project: Source/NtCall64.sln
-  verbosity: normal
+
+build_script:
+  - msbuild Source/NtCall64. sln /p:Configuration=Release /p:Platform=x64 /p:PlatformToolset=v143
