@@ -1,4 +1,4 @@
-[![Build status](https://ci.appveyor.com/api/projects/status/7aio324c7pkmqxfm?svg=true)](https://ci.appveyor.com/project/hfiref0x/ntcall64)
+[![Build status](https://img.shields.io/appveyor/build/hfiref0x/ntcall64?logo=appveyor)](https://ci.appveyor.com/project/hfiref0x/ntcall64)
 [![Visitors](https://api.visitorbadge.io/api/visitors?path=github.com%2Fhfiref0x%2Fntcall&countColor=%23263759&style=flat)](https://visitorbadge.io/status?path=github.com%2Fhfiref0x%2Fntcall)
 
 # NTCALL64
@@ -168,7 +168,7 @@ BTC (Bitcoin): bc1qzkvtpa0053cagf35dqmpvv9k8hyrwl7krwdz84q39mcpy68y6tmqsju0g4
 
 ## Authors
 
-(c) 2016 - 2025 NTCALL64 Project  
+(c) 2016 - 2026 NTCALL64 Project  
 Original NtCall by Peter Kosyh aka Gloomy (c) 2001, [gl00my.chat.ru](http://gl00my.chat.ru/)
 
 ---
