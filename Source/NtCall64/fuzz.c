@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016 - 2025
+*  (C) COPYRIGHT AUTHORS, 2016 - 2026
 *
 *  TITLE:       FUZZ.C
 *
 *  VERSION:     2.01
 *
-*  DATE:        02 Dec 2025
+*  DATE:        14 Feb 2026
 *
 *  Fuzzing routines.
 *
@@ -42,14 +42,14 @@ void FuzzPrintServiceInformation(
     _In_ ULONG ServicesCount,
     _In_ ULONG NumberOfArguments,
     _In_ ULONG ServiceId,
-    _In_opt_ LPCSTR ServiceName,
+    _In_ LPCSTR ServiceName,
     _In_ BOOL BlackListed)
 {
     CHAR szConsoleText[4096];
     WORD wColor = (BlackListed) ? FOREGROUND_GREEN | FOREGROUND_INTENSITY : 0;
 
     if (BlackListed) {
-        StringCchPrintfA(szConsoleText, sizeof(szConsoleText),
+        StringCchPrintfA(szConsoleText, ARRAYSIZE(szConsoleText),
             "\r[%04lu/%04lu] Service: %s, stack: %lu - found in blacklist, skipped",
             ServiceId,
             ServicesCount,
@@ -60,7 +60,7 @@ void FuzzPrintServiceInformation(
     }
     else {
 
-        StringCchPrintfA(szConsoleText, sizeof(szConsoleText),
+        StringCchPrintfA(szConsoleText, ARRAYSIZE(szConsoleText),
             "\r[%04lu/%04lu] Service: %s, stack: %lu",
             ServiceId,
             ServicesCount,
@@ -88,13 +88,10 @@ NTSTATUS DoSystemCall(
 )
 {
     ULONG c, paramCount;
-    ULONG_PTR args[MAX_PARAMETERS];
-    PARAM_TYPE_HINT typeHints[MAX_PARAMETERS];
+    ULONG_PTR args[MAX_PARAMETERS] = { 0 };
+    PARAM_TYPE_HINT typeHints[MAX_PARAMETERS] = { 0 };
     NTSTATUS status;
     BOOL isWin32kSyscall = (ServiceId >= W32SYSCALLSTART);
-
-    RtlSecureZeroMemory(args, sizeof(args));
-    RtlSecureZeroMemory(typeHints, sizeof(typeHints));
 
     // Local thread buffer for parameters generation
     BYTE fuzzStructBuffer[MAX_STRUCT_BUFFER_SIZE] = { 0 };
@@ -179,7 +176,7 @@ BOOLEAN FuzzLookupWin32kNames(
             break;
         }
 
-        win32uLimit = supEnumWin32uServices(GetProcessHeap(), (LPVOID)win32u, &shadowTable);
+        win32uLimit = supEnumWin32uServices((LPVOID)win32u, &shadowTable);
         if (win32uLimit != serviceTable->CountOfEntries || shadowTable == NULL) {
             ConsoleShowMessage("[!] Win32u services enumeration failed.", TEXT_COLOR_RED);
             break;
@@ -267,7 +264,7 @@ VOID FuzzRunThreadWithWait(
 {
     HANDLE hThread;
     DWORD dwThreadId, dwWaitResult;
-    CHAR szConsoleText[100];
+    CHAR szConsoleText[MAX_PATH * 2];
 
     hThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)FuzzThreadProc,
         (LPVOID)CallParams, 0, &dwThreadId);
@@ -277,7 +274,7 @@ VOID FuzzRunThreadWithWait(
         if (dwWaitResult == WAIT_TIMEOUT) {
             InterlockedIncrement((PLONG)&g_FuzzStats.TimeoutCalls);
             TerminateThread(hThread, (DWORD)-1);
-            StringCchPrintfA(szConsoleText, sizeof(szConsoleText),
+            StringCchPrintfA(szConsoleText, ARRAYSIZE(szConsoleText),
                 "\r\n[~]Timeout reached for callproc of service: %s, callproc terminated.",
                 CallParams->ServiceName);
             ConsoleShowMessage(szConsoleText, 0);
@@ -305,7 +302,7 @@ VOID FuzzRun(
     ULONG syscallIndex, sid, nArgs;
     CALL_PARAM CallParams;
     PCHAR lpServiceName;
-    CHAR szOut[MAX_PATH * 2];
+    CHAR szOut[MAX_PATH * 4];
 
     ConsoleShowMessage("[+] Entering FuzzRun()", TEXT_COLOR_CYAN);
 
@@ -332,7 +329,7 @@ VOID FuzzRun(
         //
         // Output service information to console.
         //
-        StringCchPrintfA(szOut, sizeof(szOut),
+        StringCchPrintfA(szOut, ARRAYSIZE(szOut),
             "Probing #%lu\t\t%s",
             Context->u1.SingleSyscallId,
             lpServiceName);
@@ -420,7 +417,7 @@ VOID FuzzRun(
     //
     // Print stats.
     // 
-    StringCchPrintfA(szOut, sizeof(szOut), "\r----FuzzRun statistics----\r\n"\
+    StringCchPrintfA(szOut, ARRAYSIZE(szOut), "\r----FuzzRun statistics----\r\n"\
         "Succeeded calls: %lu\r\n"\
         "Error calls: %lu\r\n"\
         "Crashed calls: %lu\r\n"\

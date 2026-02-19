@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016 - 2025
+*  (C) COPYRIGHT AUTHORS, 2016 - 2026
 *
 *  TITLE:       GLOBAL.H
 *
 *  VERSION:     2.01
 *
-*  DATE:        02 Dec 2025
+*  DATE:        14 Feb 2026
 *
 *  Global definitions.
 *
@@ -51,8 +51,8 @@
 
 #pragma comment(lib, "Version.lib")
 
-#define TEXT_COLOR_CYAN FOREGROUND_BLUE | FOREGROUND_GREEN | FOREGROUND_INTENSITY
-#define TEXT_COLOR_RED FOREGROUND_RED | FOREGROUND_INTENSITY
+#define TEXT_COLOR_CYAN (FOREGROUND_BLUE | FOREGROUND_GREEN | FOREGROUND_INTENSITY)
+#define TEXT_COLOR_RED (FOREGROUND_RED | FOREGROUND_INTENSITY)
 #define TEXT_COLOR_YELLOW (FOREGROUND_RED | FOREGROUND_GREEN | FOREGROUND_INTENSITY)
 
 typedef struct _RAW_SERVICE_TABLE {

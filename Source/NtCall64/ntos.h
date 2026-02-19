@@ -5,9 +5,9 @@
 *
 *  TITLE:       NTOS.H
 *
-*  VERSION:     1.236
+*  VERSION:     1.240
 *
-*  DATE:        12 Jun 2025
+*  DATE:        02 Dec 2025
 *
 *  Common header file for the ntos API functions and definitions.
 *
@@ -59,6 +59,12 @@ extern "C" {
 
 #ifndef PAGE_SIZE
 #define PAGE_SIZE 0x1000ull
+#endif
+#ifndef PAGE_MASK
+#define PAGE_MASK 0xFFF
+#endif
+#ifndef PAGE_SHIFT
+#define PAGE_SHIFT 0xC
 #endif
 
 #ifndef ABSOLUTE_TIME
@@ -114,8 +120,10 @@ typedef PVOID PMEM_EXTENDED_PARAMETER;
 #endif
 
 #ifndef IN_REGION
-#define IN_REGION(x, Base, Size) (((ULONG_PTR)(x) >= (ULONG_PTR)(Base)) && \
-            ((ULONG_PTR)(x) <= (ULONG_PTR)(Base) + (ULONG_PTR)(Size)))
+#define IN_REGION(x, Base, Size) ( \
+    (((ULONG_PTR)(Base) + (ULONG_PTR)(Size)) > (ULONG_PTR)(Base)) && \
+    /* x within [Base, Base+Size) */ \
+    (((ULONG_PTR)(x) >= (ULONG_PTR)(Base)) && ((ULONG_PTR)(x) < ((ULONG_PTR)(Base) + (ULONG_PTR)(Size)))))
 #endif
 
 #define PE_SIGNATURE_SIZE           4
@@ -1615,7 +1623,6 @@ typedef enum _PS_ATTRIBUTE_NUM {
 #define RTL_USER_PROC_IMAGE_KEY_MISSING                 0x00004000
 #define RTL_USER_PROC_DEV_OVERRIDE_ENABLED              0x00008000
 #define RTL_USER_PROC_OPTIN_PROCESS                     0x00020000
-#define RTL_USER_PROC_OPTIN_PROCESS                     0x00020000
 #define RTL_USER_PROC_SESSION_OWNER                     0x00040000
 #define RTL_USER_PROC_HANDLE_USER_CALLBACK_EXCEPTIONS   0x00080000
 #define RTL_USER_PROC_PROTECTED_PROCESS                 0x00400000
@@ -1924,6 +1931,9 @@ typedef enum _SYSTEM_INFORMATION_CLASS {
     SystemCodeIntegrityPolicyManagementInformation = 248,
     SystemMemoryNumaCacheInformation = 249,
     SystemProcessorFeaturesBitMapInformation = 250,
+    SystemRefTraceInformationEx = 251,
+    SystemBasicProcessInformation = 252,
+    SystemHandleCountInformation = 253,
     MaxSystemInfoClass
 } SYSTEM_INFORMATION_CLASS, * PSYSTEM_INFORMATION_CLASS;
 
@@ -7749,6 +7759,142 @@ typedef PFLT_FILTER_V5 PFLT_FILTER_COMPATIBLE;
 */
 
 /*
+** SUPERFETCH START
+*/
+
+#define SUPERFETCH_VERSION 45 // rev
+#define SUPERFETCH_MAGIC ('kuhC') // rev
+
+typedef enum _SUPERFETCH_INFORMATION_CLASS {
+    SuperfetchRetrieveTrace = 1,
+    SuperfetchSystemParameters = 2,
+    SuperfetchLogEvent = 3,
+    SuperfetchGenerateTrace = 4,
+    SuperfetchPrefetch = 5,
+    SuperfetchPfnQuery = 6,
+    SuperfetchPfnSetPriority = 7,
+    SuperfetchPrivSourceQuery = 8,
+    SuperfetchSequenceNumberQuery = 9,
+    SuperfetchScenarioPhase = 10,
+    SuperfetchWorkerPriority = 11,
+    SuperfetchScenarioQuery = 12,
+    SuperfetchScenarioPrefetch = 13,
+    SuperfetchRobustnessControl = 14,
+    SuperfetchTimeControl = 15,
+    SuperfetchMemoryListQuery = 16,
+    SuperfetchMemoryRangesQuery = 17,
+    SuperfetchTracingControl = 18,
+    SuperfetchTrimWhileAgingControl = 19,
+    SuperfetchInformationMax = 20
+} SUPERFETCH_INFORMATION_CLASS;
+
+typedef struct _SUPERFETCH_INFORMATION {
+    ULONG Version;
+    ULONG Magic;
+    SUPERFETCH_INFORMATION_CLASS InfoClass;
+    PVOID Data;
+    ULONG Length;
+} SUPERFETCH_INFORMATION, * PSUPERFETCH_INFORMATION;
+
+typedef struct _PF_MEMORY_RANGE {
+    ULONG_PTR BasePfn;
+    ULONG_PTR PageCount;
+} PF_MEMORY_RANGE, * PPF_MEMORY_RANGE;
+
+typedef struct _PF_PHYSICAL_MEMORY_RANGE {
+    ULONG_PTR BasePfn;
+    ULONG_PTR PageCount;
+} PF_PHYSICAL_MEMORY_RANGE, * PPF_PHYSICAL_MEMORY_RANGE;
+
+typedef struct __declspec(align(8)) _PF_MEMORY_RANGE_INFO_V1 {
+    ULONG Version;
+    ULONG RangeCount;
+    ULONG Reserved;
+    PF_PHYSICAL_MEMORY_RANGE Ranges[ANYSIZE_ARRAY];
+} PF_MEMORY_RANGE_INFO_V1, * PPF_MEMORY_RANGE_INFO_V1;
+
+typedef struct __declspec(align(8))  _PF_MEMORY_RANGE_INFO_V2 {
+    ULONG Version;
+    ULONG Flags;
+    ULONG RangeCount;
+    PF_PHYSICAL_MEMORY_RANGE Ranges[ANYSIZE_ARRAY];
+} PF_MEMORY_RANGE_INFO_V2, * PPF_MEMORY_RANGE_INFO_V2;
+
+typedef struct _PF_MEMORY_RANGE_V2 {
+    ULONG_PTR BasePfn;
+    ULONG_PTR PageCount;
+    ULONG_PTR Unknown;
+} PF_MEMORY_RANGE_V2, * PPF_MEMORY_RANGE_V2;
+
+typedef struct _MEMORY_FRAME_INFORMATION {
+    ULONGLONG UseDescription : 4;
+    ULONGLONG ListDescription : 3;
+    ULONGLONG Reserved0 : 1;
+    ULONGLONG Pinned : 1;
+    ULONGLONG DontUse : 48;
+    ULONGLONG Priority : 3;
+    ULONGLONG Reserved : 4;
+} MEMORY_FRAME_INFORMATION, * PMEMORY_FRAME_INFORMATION;
+
+typedef struct _PAGEDIR_INFORMATION {
+    ULONGLONG DontUse : 9;
+    ULONGLONG PageDirectoryBase : 48;
+    ULONGLONG Reserved : 7;
+} PAGEDIR_INFORMATION, * PPAGEDIR_INFORMATION;
+
+typedef struct _MMPFN_IDENTITY {
+    union {
+        MEMORY_FRAME_INFORMATION e1;
+        PAGEDIR_INFORMATION e3;
+    } u1;
+    ULONG_PTR PageFrameIndex;
+    union {
+        struct {
+            ULONG Image : 1;
+            ULONG Mismatch : 1;
+        } e1;
+        PVOID FileObject;
+        PVOID UniqueFileObjectKey;
+        PVOID ProtoPteAddress;
+        PVOID VirtualAddress;
+    } u2;
+} MMPFN_IDENTITY, * PMMPFN_IDENTITY;
+
+typedef struct _SYSTEM_MEMORY_LIST_INFORMATION {
+    SIZE_T ZeroPageCount;
+    SIZE_T FreePageCount;
+    SIZE_T ModifiedPageCount;
+    SIZE_T ModifiedNoWritePageCount;
+    SIZE_T BadPageCount;
+    SIZE_T PageCountByPriority[8];
+    SIZE_T RepurposedPagesByPriority[8];
+    SIZE_T ModifiedPageCountPageFile;
+} SYSTEM_MEMORY_LIST_INFORMATION, * PSYSTEM_MEMORY_LIST_INFORMATION;
+
+typedef struct _PF_PFN_PRIO_REQUEST {
+    ULONG Version;
+    ULONG RequestFlags;
+    ULONG_PTR PfnCount;
+    SYSTEM_MEMORY_LIST_INFORMATION MemInfo;
+    MMPFN_IDENTITY PageData[ANYSIZE_ARRAY];
+} PF_PFN_PRIO_REQUEST, * PPF_PFN_PRIO_REQUEST;
+
+typedef struct _SUPERFETCH_TRANSLATION_ENTRY {
+    ULONG_PTR VirtualAddress;
+    ULONG_PTR PhysicalAddress;
+} SUPERFETCH_TRANSLATION_ENTRY, * PSUPERFETCH_TRANSLATION_ENTRY;
+
+typedef struct _SUPERFETCH_MEMORY_MAP {
+    PSUPERFETCH_TRANSLATION_ENTRY TranslationTable;
+    ULONG_PTR TableSize;
+    ULONG RangeCount;
+} SUPERFETCH_MEMORY_MAP, * PSUPERFETCH_MEMORY_MAP;
+
+/*
+** SUPERFETCH END
+*/
+
+/*
 ** SILO START
 */
 
@@ -11759,6 +11905,7 @@ typedef enum _OBJECT_INFORMATION_CLASS {
     ObjectHandleFlagInformation,
     ObjectSessionInformation,
     ObjectSessionObjectInformation,
+    ObjectSetRefTraceInformation,
     MaxObjectInfoClass
 } OBJECT_INFORMATION_CLASS;
 
@@ -12459,22 +12606,6 @@ NtWriteFileGather(
     _In_ ULONG Length,
     _In_opt_ PLARGE_INTEGER ByteOffset,
     _In_opt_ PULONG Key);
-
-NTSYSAPI
-NTSTATUS
-NTAPI
-NtQueryDirectoryFile(
-    _In_ HANDLE FileHandle,
-    _In_opt_ HANDLE Event,
-    _In_opt_ PIO_APC_ROUTINE ApcRoutine,
-    _In_opt_ PVOID ApcContext,
-    _Out_ PIO_STATUS_BLOCK IoStatusBlock,
-    _Out_writes_bytes_(Length) PVOID FileInformation,
-    _In_ ULONG Length,
-    _In_ FILE_INFORMATION_CLASS FileInformationClass,
-    _In_ BOOLEAN ReturnSingleEntry,
-    _In_opt_ PUNICODE_STRING FileName,
-    _In_ BOOLEAN RestartScan);
 
 NTSYSAPI
 NTSTATUS

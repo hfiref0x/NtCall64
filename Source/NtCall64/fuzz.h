@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016 - 2025
+*  (C) COPYRIGHT AUTHORS, 2016 - 2026
 *
 *  TITLE:       FUZZ.H
 *
-*  VERSION:     2.00
+*  VERSION:     2.01
 *
-*  DATE:        27 Jun 2025
+*  DATE:        14 Feb 2026
 *
 * THIS CODE AND INFORMATION IS PROVIDED "AS IS" WITHOUT WARRANTY OF
 * ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED
@@ -21,7 +21,7 @@
 #define MAX_STRUCT_BUFFER_SIZE   4096
 #define MAX_KEYVALUE_BUFFER_SIZE 1024
 #ifdef _DEBUG
-#define FUZZ_THREAD_TIMEOUT_SEC (30)
+#define FUZZ_THREAD_TIMEOUT_SEC (40)
 #else
 #define FUZZ_THREAD_TIMEOUT_SEC (30)
 #endif

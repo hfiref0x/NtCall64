@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2025
+*  (C) COPYRIGHT AUTHORS, 2025 - 2026
 *
 *  TITLE:       FUZZ_PARAM.C
 *
 *  VERSION:     2.01
 *
-*  DATE:        02 Dec 2025
+*  DATE:        14 Feb 2026
 *
 *  Parameter type detection and structure generation for syscall fuzzing.
 *
@@ -25,7 +25,7 @@ __declspec(thread) FUZZ_MEMORY_TRACKER g_MemoryTracker;
 #ifdef _DEBUG
 BOOL VerifySyscallDatabaseSorted(UINT DbType)
 {
-    SYSCALL_PARAM_INFO* Database = (DbType == 0) ? KnownNtSyscalls : KnownWin32kSyscalls;
+    SYSCALL_PARAM_INFO* Database = (DbType == 0) ? (SYSCALL_PARAM_INFO*)KnownNtSyscalls : (SYSCALL_PARAM_INFO*)KnownWin32kSyscalls;
     SYSCALL_PARAM_INFO* prev = Database;
     SYSCALL_PARAM_INFO* curr = Database + 1;
 

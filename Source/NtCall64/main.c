@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016 - 2025
+*  (C) COPYRIGHT AUTHORS, 2016 - 2026
 *
 *  TITLE:       MAIN.C
 *
-*  VERSION:     2.00
+*  VERSION:     2.01
 *
-*  DATE:        27 Jun 2025
+*  DATE:        14 Feb 2026
 *
 *  Program entry point.
 *
@@ -34,7 +34,7 @@
 #define DEFAULT_LOG_FILE    TEXT("ntcall64.log")
 
 #define WELCOME_BANNER      "Windows NT x64 syscall fuzzer, based on NtCall by Peter Kosyh."
-#define VERSION_BANNER      "Version 2.0.1 from 02 Dec 2025\r\n"
+#define VERSION_BANNER      "Version 2.0.1 from 14 Feb 2026\r\n"
 #define PSEUDO_GRAPHICS_BANNER "\
  _   _ _____ _____   ___   _      _       ____    ___ \n\
 | \\ | |_   _/  __ \\ / _ \\ | |    | |     / ___|  /   |\n\
@@ -115,9 +115,12 @@ LONG CALLBACK VehHandler(
     EXCEPTION_POINTERS* ExceptionInfo
 )
 {
+    DWORD64 ExitThreadPfn;
     HMODULE hModule = GetModuleHandle(TEXT("kernel32.dll"));
     if (hModule) {
-        ExceptionInfo->ContextRecord->Rip = (DWORD64)GetProcAddress(hModule, "ExitThread");
+        ExitThreadPfn = (DWORD64)GetProcAddress(hModule, "ExitThread");
+        if (ExitThreadPfn)
+            ExceptionInfo->ContextRecord->Rip = ExitThreadPfn;
     }
     return EXCEPTION_CONTINUE_EXECUTION;
 }
@@ -135,8 +138,8 @@ UINT FuzzInitPhase2(
 )
 {
     BOOL probeWin32k;
-    UINT result = 0;
-    ULONG d;
+    UINT result = ERROR_SUCCESS;
+    ULONG syscallEffectiveId;
 
     NTSTATUS ntStatus;
     UNICODE_STRING usModule;
@@ -149,7 +152,6 @@ UINT FuzzInitPhase2(
         (probeWin32k) ? TEXT("win32k.sys") : TEXT("ntoskrnl.exe"));
 
     RtlInitUnicodeString(&usModule, szBuffer);
-
     ntStatus = supMapImageNoExecute(&usModule, &Context->SystemModuleBase);
 
     if (!NT_SUCCESS(ntStatus) || (Context->SystemModuleBase == NULL)) {
@@ -160,45 +162,42 @@ UINT FuzzInitPhase2(
     if (probeWin32k) {
         if (!supFindW32pServiceTable(Context->SystemModuleBase, &Context->ServiceTable)) {
             ConsoleShowMessage("[!] Could not find W32pServiceTable, abort!", TEXT_COLOR_RED);
-            return (UINT)-5;
+            result = (UINT)-5;
         }
         if (!FuzzLookupWin32kNames(Context)) {
             ConsoleShowMessage("[!] Win32k names query error, abort!", TEXT_COLOR_RED);
-            return (UINT)-6;
+            result = (UINT)-6;
         }
     }
     else {
         Context->NtdllBase = (PVOID)GetModuleHandle(TEXT("ntdll.dll"));
         if (Context->NtdllBase == NULL) {
             ConsoleShowMessage("[!] NTDLL not found, abort!", TEXT_COLOR_RED);
-            return (UINT)-7;
+            result = (UINT)-7;
         }
         if (!supFindKiServiceTable(Context->SystemModuleBase, &Context->ServiceTable)) {
             ConsoleShowMessage("[!] KiServiceTable not found, abort!", TEXT_COLOR_RED);
-            return (UINT)-8;
+            result = (UINT)-8;
         }
     }
 
-    //
-    // Validate syscall id.
-    //
-    if (Context->ProbeSingleSyscall) {
-
-        d = Context->u1.SingleSyscallId;
-
-        if (Context->ProbeWin32k) {
-            d -= W32SYSCALLSTART;
+    if (result == ERROR_SUCCESS) {
+        //
+        // Validate syscall id.
+        //
+        if (Context->ProbeSingleSyscall) {
+            syscallEffectiveId = Context->u1.SingleSyscallId;
+            if (Context->ProbeWin32k) {
+                syscallEffectiveId -= W32SYSCALLSTART;
+            }
+            if (syscallEffectiveId >= Context->ServiceTable.CountOfEntries) {
+                ConsoleShowMessage("[!] Syscall number exceeds current system available range.", TEXT_COLOR_RED);
+                result = (UINT)-9;
+            }
         }
-
-        if (d >= Context->ServiceTable.CountOfEntries) {
-            ConsoleShowMessage("[!] Syscall number exceeds current system available range.", TEXT_COLOR_RED);
-            return (UINT)-9;
-
-        }
-
+        if (result == ERROR_SUCCESS)
+            FuzzRun(Context);
     }
-
-    FuzzRun(Context);
 
     NtUnmapViewOfSection(NtCurrentProcess(), Context->SystemModuleBase);
     ConsoleShowMessage("[-] Leaving FuzzInitPhase2()", TEXT_COLOR_CYAN);
@@ -251,14 +250,14 @@ UINT FuzzInitPhase1(
 
     g_ctx.OsVersion.dwOSVersionInfoSize = sizeof(g_ctx.OsVersion);
     RtlGetVersion(&g_ctx.OsVersion);
-    StringCchPrintfA(szOut, sizeof(szOut), "[+] Windows version: %lu.%lu.%lu",
+    StringCchPrintfA(szOut, ARRAYSIZE(szOut), "[+] Windows version: %lu.%lu.%lu",
         g_ctx.OsVersion.dwMajorVersion,
         g_ctx.OsVersion.dwMinorVersion,
         g_ctx.OsVersion.dwBuildNumber);
     ConsoleShowMessage(szOut, TEXT_COLOR_CYAN);
 
     GetCurrentDirectoryA(MAX_PATH, szCurrentDir);
-    StringCchPrintfA(szOut, sizeof(szOut), "[~] Base configuration\nCurrent directory: %s\nCommand line: %s\n"\
+    StringCchPrintfA(szOut, ARRAYSIZE(szOut), "[~] Base configuration\nCurrent directory: %s\nCommand line: %s\n"\
         "Pass count: %llu per each syscall\n"\
         "Thread timeout: %lu sec\nParam heuristics: %s", 
         szCurrentDir,
@@ -276,7 +275,7 @@ UINT FuzzInitPhase1(
 
         LogEnabled = FuzzOpenLog(FuzzParams->szLogDeviceOrFile, &g_Log);
         if (!LogEnabled) {
-            StringCchPrintfA(szOut, sizeof(szOut), "[!] Log open error, GetLastError() = %lu, log will be disabled", GetLastError());
+            StringCchPrintfA(szOut, ARRAYSIZE(szOut), "[!] Log open error, GetLastError() = %lu, log will be disabled", GetLastError());
             ConsoleShowMessage(szOut, TEXT_COLOR_RED);
         }
         else {
@@ -309,7 +308,7 @@ UINT FuzzInitPhase1(
     if (g_ctx.ProbeFromSyscallId) {
         if (g_ctx.u1.StartingSyscallId >= W32SYSCALLSTART)
             g_ctx.ProbeWin32k = TRUE; // Force flag
-        StringCchPrintfA(szOut, sizeof(szOut), "[+] Starting syscall id %lu", g_ctx.u1.StartingSyscallId);
+        StringCchPrintfA(szOut, ARRAYSIZE(szOut), "[+] Starting syscall id %lu", g_ctx.u1.StartingSyscallId);
         ConsoleShowMessage(szOut, TEXT_COLOR_CYAN);
     }
 
@@ -323,7 +322,7 @@ UINT FuzzInitPhase1(
     // This is not usually critical for normal user runs, but may indicate
     // unusual restrictions or a non-admin context.
     if (enabled < (_countof(g_privs) / 2)) {
-        StringCchPrintfA(szOut, sizeof(szOut), 
+        StringCchPrintfA(szOut, ARRAYSIZE(szOut),
             "[~] Warning: Only a minority of privileges were enabled (%lu/%llu)", 
             enabled, _countof(g_privs));
         ConsoleShowMessage(szOut, TEXT_COLOR_YELLOW);
@@ -332,7 +331,7 @@ UINT FuzzInitPhase1(
     ConsoleShowMessage(g_ctx.ProbeWin32k ? "[*] Win32k table probe mode" : "[*] Ntoskrnl table probe mode", TEXT_COLOR_CYAN);
 
     if (BlackListCreateFromFile(&g_ctx.BlackList, CFG_FILE, g_ctx.ProbeWin32k ? (LPCSTR)"win32k" : (LPCSTR)"ntos")) {
-        StringCchPrintfA(szOut, sizeof(szOut), "[+] Blacklist created with %lu entries", g_ctx.BlackList.NumberOfEntries);
+        StringCchPrintfA(szOut, ARRAYSIZE(szOut), "[+] Blacklist created with %lu entries", g_ctx.BlackList.NumberOfEntries);
         ConsoleShowMessage(szOut, TEXT_COLOR_CYAN);
     }
 

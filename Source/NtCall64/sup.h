@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016 - 2025
+*  (C) COPYRIGHT AUTHORS, 2016 - 2026
 *
 *  TITLE:       SUP.H
 *
 *  VERSION:     2.01
 *
-*  DATE:        02 Dec 2025
+*  DATE:        14 Feb 2026
 *
 * THIS CODE AND INFORMATION IS PROVIDED "AS IS" WITHOUT WARRANTY OF
 * ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED
@@ -51,7 +51,7 @@ BOOL supGetParamOption(
 
 NTSTATUS supIsLocalSystem(
     _In_ HANDLE hToken,
-    _Out_ PBOOL pbResult);
+    _Out_opt_ PBOOL pbResult);
 
 BOOLEAN supUserIsFullAdmin(
     _In_ HANDLE hToken);
@@ -66,7 +66,6 @@ PCHAR supGetProcNameBySDTIndex(
     _In_ ULONG SDTIndex);
 
 ULONG supEnumWin32uServices(
-    _In_ HANDLE HeapHandle,
     _In_ LPVOID ModuleBase,
     _Inout_ PWIN32_SHADOWTABLE* Table);
 

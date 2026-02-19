@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016 - 2025
+*  (C) COPYRIGHT AUTHORS, 2016 - 2026
 *
 *  TITLE:       SUP.C
 *
 *  VERSION:     2.01
 *
-*  DATE:        02 Dec 2025
+*  DATE:        14 Feb 2026
 *
 *  Support routines.
 *
@@ -101,13 +101,13 @@ VOID ConsoleShowMessage2(
         SetConsoleCursorPosition(hStdHandle, beginPos);
 
         clearBufferSize = csbi.dwSize.X;
-        lpClearBuffer = (LPSTR)HeapAlloc(GetProcessHeap(), HEAP_ZERO_MEMORY, clearBufferSize + 1);
+        lpClearBuffer = (LPSTR)supHeapAlloc(clearBufferSize + 1);
 
         if (lpClearBuffer) {
             memset(lpClearBuffer, ' ', clearBufferSize);
             WriteFile(hStdHandle, lpClearBuffer, clearBufferSize, &r, NULL);
             SetConsoleCursorPosition(hStdHandle, beginPos);
-            HeapFree(GetProcessHeap(), 0, lpClearBuffer);
+            supHeapFree(lpClearBuffer);
         }
     }
 
@@ -373,7 +373,6 @@ PCHAR supGetProcNameBySDTIndex(
 *
 */
 ULONG supEnumWin32uServices(
-    _In_ HANDLE HeapHandle,
     _In_ LPVOID ModuleBase,
     _Inout_ PWIN32_SHADOWTABLE* Table
 )
@@ -404,8 +403,7 @@ ULONG supEnumWin32uServices(
             if (*(PDWORD)fnptr != 0xb8d18b4c) //mov r10, rcx; mov eax
                 continue;
 
-            tableEntry = (PWIN32_SHADOWTABLE)HeapAlloc(HeapHandle,
-                HEAP_ZERO_MEMORY, sizeof(WIN32_SHADOWTABLE));
+            tableEntry = (PWIN32_SHADOWTABLE)supHeapAlloc(sizeof(WIN32_SHADOWTABLE));
 
             if (tableEntry == NULL)
                 break;
@@ -452,7 +450,7 @@ VOID supFreeWin32ShadowTable(
     Current = ShadowTable;
     while (Current) {
         Next = Current->NextService;
-        HeapFree(GetProcessHeap(), 0, Current);
+        supHeapFree(Current);
         Current = Next;
     }
 }
@@ -579,7 +577,7 @@ PSID supQueryProcessSid(
 */
 NTSTATUS supIsLocalSystem(
     _In_ HANDLE hToken,
-    _Out_ PBOOL pbResult)
+    _Out_opt_ PBOOL pbResult)
 {
     BOOL bResult = FALSE;
     NTSTATUS status = STATUS_UNSUCCESSFUL;
