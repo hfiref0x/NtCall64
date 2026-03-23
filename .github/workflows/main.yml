@@ -31,18 +31,18 @@ jobs:
         run: |
           New-Item -ItemType Directory -Force -Path Package\Application | Out-Null
           $outputDir = "Source\NtCall64\output\${{ env.PLATFORM }}\${{ env.BUILD_CONFIGURATION }}"
-          $sourceDir = "Source\NtCall64"
+          $configFile = "Source\badcalls.ini"
 
           if (!(Test-Path "$outputDir\NtCall64.exe")) {
             throw "NtCall64.exe not found in $outputDir"
           }
 
-          if (!(Test-Path "$sourceDir\badcalls.ini")) {
-            throw "badcalls.ini not found in $sourceDir"
+          if (!(Test-Path $configFile)) {
+            throw "badcalls.ini not found at $configFile"
           }
 
           Copy-Item "$outputDir\NtCall64.exe" "Package\Application\ntcall64.exe" -Force
-          Copy-Item "$sourceDir\badcalls.ini" "Package\Application\badcalls.ini" -Force
+          Copy-Item $configFile "Package\Application\badcalls.ini" -Force
 
       - name: Upload ntcall64 snapshot
         uses: actions/upload-artifact@v6
