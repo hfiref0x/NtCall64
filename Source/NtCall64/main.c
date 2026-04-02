@@ -6,7 +6,7 @@
 *
 *  VERSION:     2.01
 *
-*  DATE:        14 Feb 2026
+*  DATE:        01 Apr 2026
 *
 *  Program entry point.
 *
@@ -34,7 +34,7 @@
 #define DEFAULT_LOG_FILE    TEXT("ntcall64.log")
 
 #define WELCOME_BANNER      "Windows NT x64 syscall fuzzer, based on NtCall by Peter Kosyh."
-#define VERSION_BANNER      "Version 2.0.1 from 14 Feb 2026\r\n"
+#define VERSION_BANNER      "Version 2.0.1 from 01 Apr 2026\r\n"
 #define PSEUDO_GRAPHICS_BANNER "\
  _   _ _____ _____   ___   _      _       ____    ___ \n\
 | \\ | |_   _/  __ \\ / _ \\ | |    | |     / ___|  /   |\n\
@@ -155,7 +155,7 @@ UINT FuzzInitPhase2(
     ntStatus = supMapImageNoExecute(&usModule, &Context->SystemModuleBase);
 
     if (!NT_SUCCESS(ntStatus) || (Context->SystemModuleBase == NULL)) {
-        supShowNtStatus("[!] Could not preload system image, abort!", ntStatus);
+        supShowErrorOrNtStatus("[!] Could not preload system image, abort!", ntStatus);
         return (UINT)-4;
     }
 
@@ -405,14 +405,14 @@ UINT FuzzInitPhase0(
                 }
             }
             else {
-                supShowNtStatus("[!] Failed to query process token information", ntStatus);
+                supShowErrorOrNtStatus("[!] Failed to query process token information", ntStatus);
                 return (UINT)-2;
             }
 
             NtClose(hToken);
         }
         else {
-            supShowNtStatus("[!] Failed to open self process token", ntStatus);
+            supShowErrorOrNtStatus("[!] Failed to open self process token", ntStatus);
             return (UINT)-3;
         }
 
@@ -567,16 +567,16 @@ UINT NtCall64Main()
     ConsoleShowMessage(VERSION_BANNER, TEXT_COLOR_CYAN);
 
 #ifdef _DEBUG
-    if (VerifySyscallDatabaseSorted(0))
+    if (VerifySyscallDatabaseIntegrity(0) && VerifySyscallDatabaseSorted(0))
         DbgPrint("KnownNtSyscalls OK\n");
     else
         DbgPrint("KnownNtSyscalls BAD\n");
 
-    if (VerifySyscallDatabaseSorted(1))
-        DbgPrint("KnownWin32kSyscalls OK\n");
-    else 
-        DbgPrint("KnownWin32kSyscalls BAD\n");
 
+    if (VerifySyscallDatabaseIntegrity(1) && VerifySyscallDatabaseSorted(1))
+        DbgPrint("KnownWin32kSyscalls OK\n");
+    else
+        DbgPrint("KnownWin32kSyscalls BAD\n");
 #endif
 
     ExceptionHandler = RtlAddVectoredExceptionHandler(1, &VehHandler);

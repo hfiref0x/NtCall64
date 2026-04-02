@@ -6,7 +6,7 @@
 *
 *  VERSION:     2.01
 *
-*  DATE:        14 Feb 2026
+*  DATE:        01 Apr 2026
 *
 *  Fuzzing routines.
 *
@@ -91,23 +91,35 @@ NTSTATUS DoSystemCall(
     ULONG_PTR args[MAX_PARAMETERS] = { 0 };
     PARAM_TYPE_HINT typeHints[MAX_PARAMETERS] = { 0 };
     NTSTATUS status;
-    BOOL isWin32kSyscall = (ServiceId >= W32SYSCALLSTART);
+    BOOL isWin32kSyscall;
+    PBYTE fuzzStructBuffer;
 
-    // Local thread buffer for parameters generation
-    BYTE fuzzStructBuffer[MAX_STRUCT_BUFFER_SIZE] = { 0 };
+    isWin32kSyscall = (ServiceId >= W32SYSCALLSTART);
+    fuzzStructBuffer = NULL;
+    status = STATUS_SUCCESS;
 
     g_MemoryTracker.Count = 0;
     g_MemoryTracker.InUse = TRUE;
 
     paramCount = ParametersInStack / FUZZ_PARAMS_STACK_DIVISOR + FUZZ_EXTRA_PARAMS;
+    if (paramCount > MAX_PARAMETERS) {
+        paramCount = MAX_PARAMETERS;
+    }
 
     if (EnableParamsHeuristic) {
+        fuzzStructBuffer = g_FuzzStructBuffer;
+        RtlSecureZeroMemory(fuzzStructBuffer, FUZZ_PARAM_BUFFER_SIZE);
+
         FuzzDetectParameterTypes(ServiceName, paramCount, isWin32kSyscall, typeHints);
     }
 
     for (c = 0; c < paramCount; c++) {
-        args[c] = FuzzGenerateParameter(c, typeHints[c], isWin32kSyscall, 
-            EnableParamsHeuristic, fuzzStructBuffer);
+        args[c] = FuzzGenerateParameter(
+            c,
+            typeHints[c],
+            isWin32kSyscall,
+            EnableParamsHeuristic,
+            fuzzStructBuffer);
     }
 
     if (g_ctx.LogEnabled && LogParams) {
@@ -273,11 +285,13 @@ VOID FuzzRunThreadWithWait(
         dwWaitResult = WaitForSingleObject(hThread, CallParams->ThreadTimeout);
         if (dwWaitResult == WAIT_TIMEOUT) {
             InterlockedIncrement((PLONG)&g_FuzzStats.TimeoutCalls);
-            TerminateThread(hThread, (DWORD)-1);
+
             StringCchPrintfA(szConsoleText, ARRAYSIZE(szConsoleText),
                 "\r\n[~]Timeout reached for callproc of service: %s, callproc terminated.",
                 CallParams->ServiceName);
             ConsoleShowMessage(szConsoleText, 0);
+
+            TerminateThread(hThread, (DWORD)-1);
         }
         CloseHandle(hThread);
     }
@@ -394,7 +408,7 @@ VOID FuzzRun(
                 bSkip = FALSE;
                 continue;
             }
-           
+
             //
             // Setup service call parameters and call it in separate thread.
             //

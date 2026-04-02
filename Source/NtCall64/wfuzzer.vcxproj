@@ -153,6 +153,7 @@
     <ClCompile Include="minirtl\_strcpy.c" />
     <ClCompile Include="minirtl\_strend.c" />
     <ClCompile Include="minirtl\_strlen.c" />
+    <ClCompile Include="minirtl\_strncmp.c" />
     <ClCompile Include="minirtl\_strncpy.c" />
     <ClCompile Include="minirtl\_strstr.c" />
     <ClCompile Include="sup.c" />

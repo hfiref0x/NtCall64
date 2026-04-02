@@ -6,7 +6,7 @@
 *
 *  VERSION:     2.01
 *
-*  DATE:        14 Feb 2026
+*  DATE:        01 Apr 2026
 *
 *  Support routines.
 *
@@ -77,6 +77,9 @@ VOID ConsoleShowMessage2(
     BOOL isCarriageReturn = FALSE;
     LPSTR lpClearBuffer = NULL;
     DWORD clearBufferSize;
+
+    if (hStdHandle == INVALID_HANDLE_VALUE)
+        return;
 
     sz = (DWORD)_strlen_a(lpMessage);
     if (sz == 0)
@@ -404,7 +407,6 @@ ULONG supEnumWin32uServices(
                 continue;
 
             tableEntry = (PWIN32_SHADOWTABLE)supHeapAlloc(sizeof(WIN32_SHADOWTABLE));
-
             if (tableEntry == NULL)
                 break;
 
@@ -728,14 +730,14 @@ NTSTATUS supxGetSystemToken(
 }
 
 /*
-* supShowNtStatus
+* supShowErrorOrNtStatus
 *
 * Purpose:
 *
-* Display detailed last nt status to user.
+* Display detailed last error status to user.
 *
 */
-VOID supShowNtStatus(
+VOID supShowErrorOrNtStatus(
     _In_ LPCSTR lpText,
     _In_ NTSTATUS Status
 )
@@ -788,6 +790,8 @@ PVOID supGetSystemInfo(
             return NULL;
 
         buffer = supHeapAlloc((SIZE_T)bufferSize);
+        if (buffer == NULL)
+            return NULL;
     }
 
     if (NT_SUCCESS(ntStatus)) {
@@ -913,7 +917,7 @@ VOID supRunAsLocalSystem(
         //
         if (!NT_SUCCESS(Status) || (hSystemToken == NULL)) {
 
-            supShowNtStatus(
+            supShowErrorOrNtStatus(
                 "No suitable system token found. Make sure you are running as administrator, code ",
                 Status);
 
@@ -934,7 +938,7 @@ VOID supRunAsLocalSystem(
 
         if (!NT_SUCCESS(Status)) {
 
-            supShowNtStatus("Error duplicating impersonation token, code ", Status);
+            supShowErrorOrNtStatus("Error duplicating impersonation token, code ", Status);
             break;
         }
 
@@ -951,7 +955,7 @@ VOID supRunAsLocalSystem(
 
         if (!NT_SUCCESS(Status)) {
 
-            supShowNtStatus("Error duplicating primary token, code ", Status);
+            supShowErrorOrNtStatus("Error duplicating primary token, code ", Status);
             break;
         }
 
@@ -966,7 +970,7 @@ VOID supRunAsLocalSystem(
 
         if (!NT_SUCCESS(Status)) {
 
-            supShowNtStatus("Error while impersonating primary token, code ", Status);
+            supShowErrorOrNtStatus("Error while impersonating primary token, code ", Status);
             break;
         }
 
@@ -990,7 +994,7 @@ VOID supRunAsLocalSystem(
             (PULONG)&dummy);
 
         if (!NT_SUCCESS(Status)) {
-            supShowNtStatus("Error adjusting token privileges, code ", Status);
+            supShowErrorOrNtStatus("Error adjusting token privileges, code ", Status);
             break;
         }
 
@@ -1004,7 +1008,7 @@ VOID supRunAsLocalSystem(
             sizeof(ULONG));
 
         if (!NT_SUCCESS(Status)) {
-            supShowNtStatus("Error setting session id, code ", Status);
+            supShowErrorOrNtStatus("Error setting session id, code ", Status);
             break;
         }
 
@@ -1035,7 +1039,7 @@ VOID supRunAsLocalSystem(
             CloseHandle(pi.hThread);
         }
         else {
-            supShowNtStatus("Run as LocalSystem, code 0x", GetLastError());
+            supShowErrorOrNtStatus("Run as LocalSystem, code 0x", GetLastError());
         }
 
     } while (FALSE);
@@ -1285,6 +1289,9 @@ BOOLEAN supFindKiServiceTable(
 
     const BYTE KiSystemServiceStartPattern[] = { 0x45, 0x33, 0xC9, 0x44, 0x8B, 0x05 };
 
+    if (NtHeaders == NULL)
+        return FALSE;
+
     SectionTableEntry = (PIMAGE_SECTION_HEADER)((PCHAR)NtHeaders +
         sizeof(ULONG) +
         sizeof(IMAGE_FILE_HEADER) +
@@ -1310,6 +1317,9 @@ BOOLEAN supFindKiServiceTable(
     if ((SectionPtr == 0) || (SectionSize == 0) || (SectionVA == 0)) {
         return FALSE;
     }
+
+    if (SectionSize < sizeof(KiSystemServiceStartPattern))
+        return FALSE;
 
     p = 0;
     for (c = 0; c < (SectionSize - sizeof(KiSystemServiceStartPattern)); c++)

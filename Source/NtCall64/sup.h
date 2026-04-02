@@ -6,7 +6,7 @@
 *
 *  VERSION:     2.01
 *
-*  DATE:        14 Feb 2026
+*  DATE:        01 Apr 2026
 *
 * THIS CODE AND INFORMATION IS PROVIDED "AS IS" WITHOUT WARRANTY OF
 * ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED
@@ -25,7 +25,7 @@ typedef struct _WIN32_SHADOWTABLE {
 #define supHeapAlloc(Size) RtlAllocateHeap(NtCurrentPeb()->ProcessHeap, HEAP_ZERO_MEMORY, Size)
 #define supHeapFree(Memory) RtlFreeHeap(NtCurrentPeb()->ProcessHeap, 0, Memory)
 
-VOID supShowNtStatus(
+VOID supShowErrorOrNtStatus(
     _In_ LPCSTR lpText,
     _In_ NTSTATUS Status);
 

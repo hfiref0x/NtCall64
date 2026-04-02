@@ -6,7 +6,7 @@
 *
 *  VERSION:     2.01
 *
-*  DATE:        14 Feb 2026
+*  DATE:        01 Apr 2026
 *
 * THIS CODE AND INFORMATION IS PROVIDED "AS IS" WITHOUT WARRANTY OF
 * ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED
@@ -16,20 +16,26 @@
 *******************************************************************************/
 #pragma once
 
-#define W32SYSCALLSTART          0x1000
-#define MAX_PARAMETERS           32
-#define MAX_STRUCT_BUFFER_SIZE   4096
-#define MAX_KEYVALUE_BUFFER_SIZE 1024
+#define W32SYSCALLSTART             0x1000
+#define MAX_PARAMETERS              32
+#define MAX_STRUCT_BUFFER_SIZE      4096
+#define MAX_KEYVALUE_BUFFER_SIZE    1024
 #ifdef _DEBUG
-#define FUZZ_THREAD_TIMEOUT_SEC (40)
+#define FUZZ_THREAD_TIMEOUT_SEC     (60)
 #else
-#define FUZZ_THREAD_TIMEOUT_SEC (30)
+#define FUZZ_THREAD_TIMEOUT_SEC     (30)
 #endif
-#define FUZZ_PASS_COUNT         (64) * (1024)
+#define FUZZ_PASS_COUNT             (64) * (1024)
 
-#define FUZZ_PARAMS_STACK_DIVISOR 4
-#define FUZZ_EXTRA_PARAMS         4
-#define FUZZ_TIMEOUT_MULTIPLE     8
+#define FUZZ_PARAMS_STACK_DIVISOR   4
+#define FUZZ_EXTRA_PARAMS           4
+#define FUZZ_TIMEOUT_MULTIPLE       8
+
+//
+// Per-parameter storage for generated structures.
+//
+#define FUZZ_PARAM_SLOT_SIZE      1024
+#define FUZZ_PARAM_BUFFER_SIZE    (MAX_PARAMETERS * FUZZ_PARAM_SLOT_SIZE)
 
 // Define Windows parameter types
 typedef enum _PARAM_TYPE_HINT {
@@ -60,6 +66,11 @@ typedef struct _SYSCALL_PARAM_INFO {
     LPCSTR Name;                        // Name of the syscall
     PARAM_TYPE_HINT ParamTypes[16];     // Type hints for up to 16 parameters
 } SYSCALL_PARAM_INFO, * PSYSCALL_PARAM_INFO;
+
+typedef enum _SYSCALL_LOOKUP_RESULT {
+    SyscallLookupNotFound = 0,
+    SyscallLookupFound
+} SYSCALL_LOOKUP_RESULT;
 
 typedef struct _FUZZ_STATS {
     ULONG TotalCalls;
@@ -101,6 +112,7 @@ VOID FuzzCleanupAllocations();
 
 #ifdef _DEBUG
 BOOL VerifySyscallDatabaseSorted(UINT DbType);
+BOOL VerifySyscallDatabaseIntegrity(UINT DbType);
 #endif
 
 PSECURITY_DESCRIPTOR CreateFuzzedSecurityDescriptor(_In_ BYTE* FuzzStructBuffer);
@@ -113,3 +125,5 @@ PLARGE_INTEGER CreateFuzzedLargeInteger(_In_ BYTE* FuzzStructBuffer);
 PCLIENT_ID CreateFuzzedClientId(_In_ BYTE* FuzzStructBuffer);
 PSECTION_IMAGE_INFORMATION CreateFuzzedSectionImageInfo(_In_ BYTE* FuzzStructBuffer);
 PVOID CreateFuzzedKeyValueParameter(VOID);
+
+extern __declspec(thread) BYTE g_FuzzStructBuffer[FUZZ_PARAM_BUFFER_SIZE];

@@ -84,6 +84,9 @@
     <ClCompile Include="log.c">
       <Filter>Logger</Filter>
     </ClCompile>
+    <ClCompile Include="minirtl\_strncmp.c">
+      <Filter>minirtl</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ntos.h">
