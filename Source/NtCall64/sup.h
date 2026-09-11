@@ -4,9 +4,9 @@
 *
 *  TITLE:       SUP.H
 *
-*  VERSION:     2.01
+*  VERSION:     2.10
 *
-*  DATE:        01 Apr 2026
+*  DATE:        09 Sep 2026
 *
 * THIS CODE AND INFORMATION IS PROVIDED "AS IS" WITHOUT WARRANTY OF
 * ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED
@@ -94,3 +94,6 @@ PCHAR supResolveW32kServiceNameById(
 
 BOOL supIsComPort(
     _In_ LPCWSTR wsz);
+
+ULONG supGetSyscallNumberFromNtdll(
+    _In_ LPCSTR RoutineName);

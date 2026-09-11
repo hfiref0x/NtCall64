@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016 - 2025
+*  (C) COPYRIGHT AUTHORS, 2016 - 2026
 *
 *  TITLE:       LOG.C
 *
-*  VERSION:     2.00
+*  VERSION:     2.10
 *
-*  DATE:        27 Jun 2025
+*  DATE:        09 Sep 2026
 *
 *  Log support (binary form).
 *
@@ -34,12 +34,29 @@ BOOLEAN FuzzOpenLog(
 {
     DWORD openFlags = OPEN_EXISTING;
     HANDLE hFile;
+    WCHAR szDeviceName[MAX_PATH + 1];
 
-    if (LogParams == NULL)
+    if (LogParams == NULL || LogDeviceFileName == NULL)
         return FALSE;
+
+    LogParams->FailureReported = FALSE;
 
     if (LogParams->LogToFile)
         openFlags = CREATE_ALWAYS;
+
+    if (!LogParams->LogToFile && supIsComPort(LogDeviceFileName)) {
+
+        if (((LogDeviceFileName[3] >= L'0') && (LogDeviceFileName[3] <= L'9')) &&
+            (LogDeviceFileName[4] != 0))
+        {
+            StringCchPrintfW(szDeviceName, RTL_NUMBER_OF(szDeviceName), L"\\\\.\\%ws", LogDeviceFileName);
+        }
+        else {
+            _strcpy(szDeviceName, LogDeviceFileName);
+        }
+
+        LogDeviceFileName = szDeviceName;
+    }
 
     hFile = CreateFile(LogDeviceFileName,
         GENERIC_WRITE | SYNCHRONIZE,
@@ -80,6 +97,7 @@ VOID FuzzCloseLog(
     CloseHandle(logHandle);
     LogParams->LogHandle = INVALID_HANDLE_VALUE;
     LogParams->LogToFile = FALSE;
+    LogParams->FailureReported = FALSE;
 }
 
 /*
@@ -97,9 +115,12 @@ VOID FuzzLogCallBinary(
     _In_ ULONG_PTR* Arguments
 )
 {
-    NC64_SYSCALL_LOG_ENTRY entry;
+    BOOL bResult;
     DWORD toWrite, bytesIO;
+    ULONG storedArgCount;
+    ULONG flags;
     HANDLE logHandle;
+    NC64_SYSCALL_LOG_ENTRY entry;
 
     if (LogParams == NULL || Arguments == NULL)
         return;
@@ -108,18 +129,54 @@ VOID FuzzLogCallBinary(
     if (logHandle == INVALID_HANDLE_VALUE)
         return;
 
-    if (NumberOfArguments > NC64_LOG_MAX_ARGS)
-        NumberOfArguments = NC64_LOG_MAX_ARGS;
+    storedArgCount = NumberOfArguments;
+    if (storedArgCount > NC64_LOG_MAX_ARGS)
+        storedArgCount = NC64_LOG_MAX_ARGS;
 
+    flags = 0;
+    if (ServiceId >= W32SYSCALLSTART)
+        flags |= NC64_LOG_FLAG_WIN32K;
+    if (g_ctx.EnableParamsHeuristic)
+        flags |= NC64_LOG_FLAG_HEURISTIC;
+
+    RtlSecureZeroMemory(&entry, sizeof(entry));
+    entry.Signature = NC64_LOG_SIGNATURE;
+    entry.Version = NC64_LOG_VERSION;
+    entry.Flags = flags;
     entry.SyscallNumber = ServiceId;
     entry.ArgCount = NumberOfArguments;
-    RtlZeroMemory(entry.Arguments, sizeof(entry.Arguments));
-    if (NumberOfArguments)
-        memcpy(entry.Arguments, Arguments, NumberOfArguments * sizeof(ULONG_PTR));
+    entry.StoredArgCount = storedArgCount;
 
-    toWrite = sizeof(ULONG) * 2 + sizeof(ULONG_PTR) * NC64_LOG_MAX_ARGS;
-    WriteFile(logHandle, &entry, toWrite, &bytesIO, NULL);
+    if (storedArgCount)
+        RtlCopyMemory(entry.Arguments, Arguments, storedArgCount * sizeof(ULONG_PTR));
 
-    if (LogParams->LogToFile)
-        FlushFileBuffers(logHandle);
+    toWrite = sizeof(entry);
+    bytesIO = 0;
+
+    bResult = WriteFile(logHandle, &entry, toWrite, &bytesIO, NULL);
+    if (!bResult || bytesIO != toWrite) {
+
+        if (!LogParams->FailureReported) {
+            LogParams->FailureReported = TRUE;
+            ConsoleShowMessage("[!] Logging write failed, logging disabled", TEXT_COLOR_RED);
+        }
+
+        CloseHandle(logHandle);
+        LogParams->LogHandle = INVALID_HANDLE_VALUE;
+        LogParams->LogToFile = FALSE;
+        return;
+    }
+
+    if (LogParams->LogToFile) {
+        if (!FlushFileBuffers(logHandle)) {
+            if (!LogParams->FailureReported) {
+                LogParams->FailureReported = TRUE;
+                ConsoleShowMessage("[!] Log flush failed, logging disabled", TEXT_COLOR_RED);
+            }
+
+            CloseHandle(logHandle);
+            LogParams->LogHandle = INVALID_HANDLE_VALUE;
+            LogParams->LogToFile = FALSE;
+        }
+    }
 }

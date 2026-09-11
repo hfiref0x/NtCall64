@@ -4,9 +4,9 @@
 *
 *  TITLE:       FUZZ.C
 *
-*  VERSION:     2.01
+*  VERSION:     2.10
 *
-*  DATE:        01 Apr 2026
+*  DATE:        09 Sep 2026
 *
 *  Fuzzing routines.
 *
@@ -18,14 +18,6 @@
 *******************************************************************************/
 
 #include "global.h"
-
-#ifdef __cplusplus 
-extern "C" {
-#endif
-    NTSTATUS ntSyscallGate(ULONG ServiceId, ULONG ArgumentCount, ULONG_PTR* Arguments);
-#ifdef __cplusplus
-}
-#endif
 
 FUZZ_STATS g_FuzzStats = { 0 };
 
@@ -87,16 +79,13 @@ NTSTATUS DoSystemCall(
     _In_ BOOL EnableParamsHeuristic
 )
 {
+    BOOL isWin32kSyscall = (ServiceId >= W32SYSCALLSTART), isCreateThread;
+    BOOL usedCreateThreadExProfile = FALSE;
+    NTSTATUS status = STATUS_SUCCESS;
     ULONG c, paramCount;
+    PBYTE fuzzStructBuffer = NULL;
     ULONG_PTR args[MAX_PARAMETERS] = { 0 };
     PARAM_TYPE_HINT typeHints[MAX_PARAMETERS] = { 0 };
-    NTSTATUS status;
-    BOOL isWin32kSyscall;
-    PBYTE fuzzStructBuffer;
-
-    isWin32kSyscall = (ServiceId >= W32SYSCALLSTART);
-    fuzzStructBuffer = NULL;
-    status = STATUS_SUCCESS;
 
     g_MemoryTracker.Count = 0;
     g_MemoryTracker.InUse = TRUE;
@@ -113,13 +102,35 @@ NTSTATUS DoSystemCall(
         FuzzDetectParameterTypes(ServiceName, paramCount, isWin32kSyscall, typeHints);
     }
 
-    for (c = 0; c < paramCount; c++) {
-        args[c] = FuzzGenerateParameter(
-            c,
-            typeHints[c],
-            isWin32kSyscall,
-            EnableParamsHeuristic,
-            fuzzStructBuffer);
+    isCreateThread = _strcmpi_a(ServiceName, "NtCreateThreadEx") == 0;
+    if (EnableParamsHeuristic &&
+        ServiceName &&
+        isCreateThread &&
+        paramCount >= 11)
+    {
+        if (FuzzBuildNtCreateThreadExArguments(args, fuzzStructBuffer)) {
+            usedCreateThreadExProfile = TRUE;
+        }
+        else {
+            for (c = 0; c < paramCount; c++) {
+                args[c] = FuzzGenerateParameter(
+                    c,
+                    typeHints[c],
+                    isWin32kSyscall,
+                    EnableParamsHeuristic,
+                    fuzzStructBuffer);
+            }
+        }
+    }
+    else {
+        for (c = 0; c < paramCount; c++) {
+            args[c] = FuzzGenerateParameter(
+                c,
+                typeHints[c],
+                isWin32kSyscall,
+                EnableParamsHeuristic,
+                fuzzStructBuffer);
+        }
     }
 
     if (g_ctx.LogEnabled && LogParams) {
@@ -130,6 +141,17 @@ NTSTATUS DoSystemCall(
     }
 
     status = ntSyscallGate(ServiceId, paramCount, args);
+
+    if (usedCreateThreadExProfile) {
+        HANDLE* pThreadHandle;
+
+        pThreadHandle = (HANDLE*)args[0];
+        if (pThreadHandle && *pThreadHandle) {
+            NtTerminateThread(*pThreadHandle, STATUS_SUCCESS);
+            NtClose(*pThreadHandle);
+            *pThreadHandle = NULL;
+        }
+    }
 
     InterlockedIncrement((PLONG)&g_FuzzStats.TotalCalls);
 
@@ -157,10 +179,10 @@ BOOLEAN FuzzLookupWin32kNames(
 {
     BOOLEAN result = FALSE;
     ULONG i;
+    ULONG win32uLimit;
     PRAW_SERVICE_TABLE serviceTable;
     PCHAR* win32pServiceTableNames = NULL;
     HMODULE win32u = NULL;
-    ULONG win32uLimit;
     PWIN32_SHADOWTABLE shadowTable = NULL;
     PCHAR serviceName;
 
@@ -274,8 +296,8 @@ VOID FuzzRunThreadWithWait(
     _In_ CALL_PARAM* CallParams
 )
 {
-    HANDLE hThread;
     DWORD dwThreadId, dwWaitResult;
+    HANDLE hThread;
     CHAR szConsoleText[MAX_PATH * 2];
 
     hThread = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)FuzzThreadProc,
@@ -310,10 +332,10 @@ VOID FuzzRun(
 )
 {
     BOOL probeWin32k = Context->ProbeWin32k, bSkip = FALSE;
+    ULONG syscallIndex, sid, nArgs;
     BLACKLIST* BlackList = &Context->BlackList;
     PVOID ntdllBase = Context->NtdllBase;
     PRAW_SERVICE_TABLE ServiceTable = &Context->ServiceTable;
-    ULONG syscallIndex, sid, nArgs;
     CALL_PARAM CallParams;
     PCHAR lpServiceName;
     CHAR szOut[MAX_PATH * 4];
@@ -432,11 +454,11 @@ VOID FuzzRun(
     // Print stats.
     // 
     StringCchPrintfA(szOut, ARRAYSIZE(szOut), "\r----FuzzRun statistics----\r\n"\
-        "Succeeded calls: %lu\r\n"\
-        "Error calls: %lu\r\n"\
-        "Crashed calls: %lu\r\n"\
-        "Timed out calls: %lu\r\n"\
-        "Total calls: %lu\r\n----FuzzRun statistics----\r\n",
+        "Succeeded calls: %ld\r\n"\
+        "Error calls: %ld\r\n"\
+        "Crashed calls: %ld\r\n"\
+        "Timed out calls: %ld\r\n"\
+        "Total calls: %ld\r\n----FuzzRun statistics----\r\n",
         InterlockedCompareExchange((PLONG)&g_FuzzStats.SuccessCalls, 0, 0),
         InterlockedCompareExchange((PLONG)&g_FuzzStats.ErrorCalls, 0, 0),
         InterlockedCompareExchange((PLONG)&g_FuzzStats.CrashedCalls, 0, 0),

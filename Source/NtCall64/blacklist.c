@@ -4,9 +4,9 @@
 *
 *  TITLE:       BLACKLIST.C
 *
-*  VERSION:     2.01
+*  VERSION:     2.10
 *
-*  DATE:        01 Apr 2026
+*  DATE:        09 Sep 2026
 *
 *  Syscall blacklist handling.
 *
@@ -51,6 +51,52 @@ DWORD BlackListHashString(
     }
 
     return Hash;
+}
+
+/*
+* BlackListNormalizeEntry
+*
+* Purpose:
+*
+* Tolerate name=value, blank, and comment entries.
+*
+*/
+VOID BlackListNormalizeEntry(
+    _Inout_ LPSTR Entry
+)
+{
+    LPSTR s, eq;
+
+    if (Entry == NULL)
+        return;
+
+    s = Entry;
+    while (*s == ' ' || *s == '\t')
+        s++;
+
+    if (s != Entry) {
+        while (*s) {
+            *Entry++ = *s++;
+        }
+        *Entry = 0;
+        Entry = Entry - _strlen_a(Entry);
+    }
+
+    eq = _strchr_a(Entry, '=');
+    if (eq)
+        *eq = 0;
+
+    while (*Entry) {
+        Entry++;
+    }
+
+    while (Entry > s) {
+        Entry--;
+        if (*Entry == 0 || *Entry == ' ' || *Entry == '\t' || *Entry == '\r' || *Entry == '\n')
+            *Entry = 0;
+        else
+            break;
+    }
 }
 
 /*
@@ -108,12 +154,11 @@ BOOL BlackListCreateFromFile(
     _In_ LPCSTR ConfigSectionName
 )
 {
+    BOOL bSuccess;
+    ULONG i, nSize, SectionSize, BytesRead, EntryLength;
     LPSTR Section, SectionPtr;
-    ULONG nSize, SectionSize, BytesRead, Length;
     CHAR ConfigFilePath[MAX_PATH + 16];
     HANDLE BlackListHeap;
-    ULONG i;
-    BOOL bSuccess;
 
     Section = NULL;
     BlackListHeap = NULL;
@@ -153,13 +198,19 @@ BOOL BlackListCreateFromFile(
         SectionPtr = Section;
 
         while (BytesRead < SectionSize && *SectionPtr) {
-            Length = BlackListAddEntry(BlackList, SectionPtr);
-            if (Length == 0) {
-                BlackList->NumberOfEntries = 0;
-                break;
+
+            EntryLength = (ULONG)_strlen_a(SectionPtr) + 1;
+            BlackListNormalizeEntry(SectionPtr);
+
+            if (*SectionPtr != 0 && *SectionPtr != ';' && *SectionPtr != '#') {
+                if (BlackListAddEntry(BlackList, SectionPtr) == 0) {
+                    BlackList->NumberOfEntries = 0;
+                    break;
+                }
             }
-            BytesRead += Length;
-            SectionPtr += Length;
+
+            BytesRead += EntryLength;
+            SectionPtr += EntryLength;
         }
 
         if (BlackList->NumberOfEntries == 0)

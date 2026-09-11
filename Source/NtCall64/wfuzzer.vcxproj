@@ -14,7 +14,7 @@
     <ProjectGuid>{69B98EF8-BA16-40CB-829B-A53D857D0104}</ProjectGuid>
     <RootNamespace>wfuzzer</RootNamespace>
     <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
-    <ProjectName>NtCall64</ProjectName>
+    <ProjectName>wfuzzer</ProjectName>
   </PropertyGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
@@ -51,6 +51,7 @@
     <IntDir>.\output\$(Platform)\$(Configuration)\</IntDir>
     <GenerateManifest>false</GenerateManifest>
     <RunCodeAnalysis>false</RunCodeAnalysis>
+    <TargetName>NtCall64</TargetName>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
     <CodeAnalysisRuleSet>AllRules.ruleset</CodeAnalysisRuleSet>
@@ -58,19 +59,21 @@
     <IntDir>.\output\$(Platform)\$(Configuration)\</IntDir>
     <GenerateManifest>true</GenerateManifest>
     <RunCodeAnalysis>false</RunCodeAnalysis>
+    <TargetName>NtCall64</TargetName>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
     <ClCompile>
       <WarningLevel>Level4</WarningLevel>
-      <ExpandAttributedSource>true</ExpandAttributedSource>
       <AssemblerOutput>All</AssemblerOutput>
       <BrowseInformation>true</BrowseInformation>
       <CompileAs>CompileAsC</CompileAs>
       <EnablePREfast>false</EnablePREfast>
-      <ExceptionHandling>false</ExceptionHandling>
-      <BasicRuntimeChecks>Default</BasicRuntimeChecks>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <BufferSecurityCheck>false</BufferSecurityCheck>
+      <StringPooling>true</StringPooling>
+      <RuntimeLibrary>MultiThreaded</RuntimeLibrary>
+      <AdditionalIncludeDirectories>$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <PreprocessorDefinitions>_DEBUG;_WINDOWS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
     </ClCompile>
     <Link>
       <Version>6.0</Version>
@@ -109,6 +112,7 @@
       <BufferSecurityCheck>false</BufferSecurityCheck>
       <MultiProcessorCompilation>true</MultiProcessorCompilation>
       <StringPooling>true</StringPooling>
+      <AdditionalIncludeDirectories>$(ProjectDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
     </ClCompile>
     <Link>
       <EnableCOMDATFolding>true</EnableCOMDATFolding>
@@ -116,7 +120,6 @@
       <Version>6.0</Version>
       <GenerateMapFile>true</GenerateMapFile>
       <MapExports>true</MapExports>
-      <LargeAddressAware>true</LargeAddressAware>
       <TerminalServerAware>true</TerminalServerAware>
       <SubSystem>Console</SubSystem>
       <GenerateDebugInformation>false</GenerateDebugInformation>
@@ -125,6 +128,7 @@
       <SetChecksum>true</SetChecksum>
       <FullProgramDatabaseFile>true</FullProgramDatabaseFile>
       <AdditionalOptions>/NOCOFFGRPINFO %(AdditionalOptions)</AdditionalOptions>
+      <LargeAddressAware>true</LargeAddressAware>
     </Link>
     <Manifest>
       <SuppressStartupBanner>false</SuppressStartupBanner>
@@ -148,6 +152,7 @@
     <ClCompile Include="minirtl\ultostr.c" />
     <ClCompile Include="minirtl\_filename.c" />
     <ClCompile Include="minirtl\_strcat.c" />
+    <ClCompile Include="minirtl\_strchr.c" />
     <ClCompile Include="minirtl\_strcmp.c" />
     <ClCompile Include="minirtl\_strcmpi.c" />
     <ClCompile Include="minirtl\_strcpy.c" />
@@ -157,6 +162,7 @@
     <ClCompile Include="minirtl\_strncpy.c" />
     <ClCompile Include="minirtl\_strstr.c" />
     <ClCompile Include="sup.c" />
+    <ClCompile Include="tests\tests.c" />
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="blacklist.h" />
@@ -171,6 +177,7 @@
     <ClInclude Include="ntos.h" />
     <ClInclude Include="resource.h" />
     <ClInclude Include="sup.h" />
+    <ClInclude Include="tests\tests.h" />
   </ItemGroup>
   <ItemGroup>
     <MASM Include="syscall.asm">

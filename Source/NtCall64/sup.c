@@ -4,9 +4,9 @@
 *
 *  TITLE:       SUP.C
 *
-*  VERSION:     2.01
+*  VERSION:     2.10
 *
-*  DATE:        01 Apr 2026
+*  DATE:        09 Sep 2026
 *
 *  Support routines.
 *
@@ -24,10 +24,9 @@ static HANDLE g_hConsoleOutput = INVALID_HANDLE_VALUE;
 BOOL ConsoleInit(
     VOID)
 {
-    COORD coordScreen = { 0, 0 };
-    DWORD cCharsWritten;
+    DWORD cCharsWritten, dwConSize;
     CONSOLE_SCREEN_BUFFER_INFO csbi;
-    DWORD dwConSize;
+    COORD coordScreen = { 0, 0 };
 
     g_hConsoleOutput = GetStdHandle(STD_OUTPUT_HANDLE);
 
@@ -70,13 +69,13 @@ VOID ConsoleShowMessage2(
     _In_ WORD wColor
 )
 {
-    CONSOLE_SCREEN_BUFFER_INFO csbi;
-    ULONG r, sz;
-    WORD SavedAttributes = 0;
-    HANDLE hStdHandle = g_hConsoleOutput;
     BOOL isCarriageReturn = FALSE;
-    LPSTR lpClearBuffer = NULL;
+    WORD SavedAttributes = 0;
     DWORD clearBufferSize;
+    ULONG r, sz;
+    HANDLE hStdHandle = g_hConsoleOutput;
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
+    COORD beginPos;
 
     if (hStdHandle == INVALID_HANDLE_VALUE)
         return;
@@ -100,18 +99,14 @@ VOID ConsoleShowMessage2(
     }
 
     if (isCarriageReturn) {
-        COORD beginPos = { 0, csbi.dwCursorPosition.Y };
+        beginPos.X = 0;
+        beginPos.Y = csbi.dwCursorPosition.Y;
+
         SetConsoleCursorPosition(hStdHandle, beginPos);
 
         clearBufferSize = csbi.dwSize.X;
-        lpClearBuffer = (LPSTR)supHeapAlloc(clearBufferSize + 1);
-
-        if (lpClearBuffer) {
-            memset(lpClearBuffer, ' ', clearBufferSize);
-            WriteFile(hStdHandle, lpClearBuffer, clearBufferSize, &r, NULL);
-            SetConsoleCursorPosition(hStdHandle, beginPos);
-            supHeapFree(lpClearBuffer);
-        }
+        FillConsoleOutputCharacterA(hStdHandle, ' ', clearBufferSize, beginPos, &r);
+        SetConsoleCursorPosition(hStdHandle, beginPos);
     }
 
     WriteFile(hStdHandle, lpMessage, sz, &r, NULL);
@@ -134,11 +129,11 @@ VOID ConsoleShowMessage(
     _In_ WORD wColor
 )
 {
-    CONSOLE_SCREEN_BUFFER_INFO csbi;
-    ULONG r, sz;
     WORD SavedAttributes = 0;
+    ULONG r, sz;
     HANDLE hStdHandle = g_hConsoleOutput;
     LPCSTR szNewLine = "\r\n";
+    CONSOLE_SCREEN_BUFFER_INFO csbi;
 
     if (hStdHandle == INVALID_HANDLE_VALUE)
         return;
@@ -170,7 +165,7 @@ VOID ConsoleShowMessage(
 * Query parameters options by name and type.
 *
 */
-_Success_(return) 
+_Success_(return)
 BOOL supGetParamOption(
     _In_ LPCWSTR params,
     _In_ LPCWSTR optionName,
@@ -181,9 +176,9 @@ BOOL supGetParamOption(
 )
 {
     BOOL result;
-    WCHAR paramBuffer[MAX_PATH + 1];
     ULONG rlen;
     INT i = 0;
+    WCHAR paramBuffer[MAX_PATH + 1];
 
     if (paramLength)
         *paramLength = 0;
@@ -239,14 +234,12 @@ BOOLEAN supUserIsFullAdmin(
 )
 {
     BOOLEAN bResult = FALSE;
-    NTSTATUS status;
     DWORD i, Attributes;
     ULONG ReturnLength = 0;
-
+    NTSTATUS status;
     PTOKEN_GROUPS pTkGroups;
-
-    SID_IDENTIFIER_AUTHORITY ntAuthority = SECURITY_NT_AUTHORITY;
     PSID adminGroup = NULL;
+    SID_IDENTIFIER_AUTHORITY ntAuthority = SECURITY_NT_AUTHORITY;
 
     do {
         if (!NT_SUCCESS(RtlAllocateAndInitializeSid(
@@ -307,9 +300,9 @@ BOOLEAN supIsClientElevated(
     _In_ HANDLE ProcessHandle
 )
 {
-    HANDLE hToken = NULL, processHandle = ProcessHandle;
     NTSTATUS Status;
     ULONG BytesRead = 0;
+    HANDLE hToken = NULL, processHandle = ProcessHandle;
     TOKEN_ELEVATION te;
 
     te.TokenIsElevated = 0;
@@ -339,12 +332,12 @@ PCHAR supGetProcNameBySDTIndex(
     _In_ ULONG SDTIndex
 )
 {
+    ULONG c, exportSize;
     PIMAGE_EXPORT_DIRECTORY pImageExportDirectory;
     PULONG nameTableBase;
     PUSHORT nameOrdinalTableBase;
     PULONG funcTable;
     PBYTE pfn;
-    ULONG c, exportSize;
 
     pImageExportDirectory = (PIMAGE_EXPORT_DIRECTORY)RtlImageDirectoryEntryToData(ModuleBase,
         TRUE, IMAGE_DIRECTORY_ENTRY_EXPORT, &exportSize);
@@ -377,13 +370,15 @@ PCHAR supGetProcNameBySDTIndex(
 */
 ULONG supEnumWin32uServices(
     _In_ LPVOID ModuleBase,
-    _Inout_ PWIN32_SHADOWTABLE* Table
+    _Inout_ PWIN32_SHADOWTABLE * Table
 )
 {
-    ULONG i, j, result = 0, exportSize;
+    USHORT ordinal;
+    ULONG i, result = 0, exportSize;
     PBYTE fnptr;
     PDWORD funcTable, nameTableBase;
     PWORD nameOrdinalTableBase;
+    LPCSTR exportName;
     PWIN32_SHADOWTABLE tableEntry;
     PIMAGE_EXPORT_DIRECTORY pImageExportDirectory;
 
@@ -396,13 +391,13 @@ ULONG supEnumWin32uServices(
         nameOrdinalTableBase = (PUSHORT)RtlOffsetToPointer(ModuleBase, pImageExportDirectory->AddressOfNameOrdinals);
         funcTable = (PDWORD)RtlOffsetToPointer(ModuleBase, pImageExportDirectory->AddressOfFunctions);
 
-        result = 0;
+        for (i = 0; i < pImageExportDirectory->NumberOfNames; ++i) {
 
-        for (i = 0; i < pImageExportDirectory->NumberOfFunctions; ++i) {
-            if (i >= pImageExportDirectory->NumberOfNames)
+            ordinal = nameOrdinalTableBase[i];
+            if (ordinal >= pImageExportDirectory->NumberOfFunctions)
                 continue;
 
-            fnptr = (PBYTE)RtlOffsetToPointer(ModuleBase, funcTable[nameOrdinalTableBase[i]]);
+            fnptr = (PBYTE)RtlOffsetToPointer(ModuleBase, funcTable[ordinal]);
             if (*(PDWORD)fnptr != 0xb8d18b4c) //mov r10, rcx; mov eax
                 continue;
 
@@ -411,22 +406,13 @@ ULONG supEnumWin32uServices(
                 break;
 
             tableEntry->Index = *(PDWORD)(fnptr + 4);
-
-            for (j = 0; j < pImageExportDirectory->NumberOfNames; ++j)
-            {
-                if (nameOrdinalTableBase[j] == i)
-                {
-                    _strncpy_a(&tableEntry->Name[0],
-                        sizeof(tableEntry->Name),
-                        (LPCSTR)RtlOffsetToPointer(ModuleBase, nameTableBase[j]),
-                        sizeof(tableEntry->Name) - 1);
-
-                    break;
-                }
-            }
+            exportName = (LPCSTR)RtlOffsetToPointer(ModuleBase, nameTableBase[i]);
+            _strncpy_a(&tableEntry->Name[0],
+                sizeof(tableEntry->Name),
+                exportName,
+                sizeof(tableEntry->Name) - 1);
 
             ++result;
-
             *Table = tableEntry;
             Table = &tableEntry->NextService;
         }
@@ -472,8 +458,8 @@ NTSTATUS supPrivilegeEnabled(
 )
 {
     NTSTATUS status;
-    PRIVILEGE_SET Privs;
     BOOLEAN bResult = FALSE;
+    PRIVILEGE_SET Privs;
 
     Privs.Control = PRIVILEGE_SET_ALL_NECESSARY;
     Privs.PrivilegeCount = 1;
@@ -502,10 +488,10 @@ PSID supQueryTokenUserSid(
     _In_ HANDLE hProcessToken
 )
 {
+    ULONG SidLength = 0, Length;
     PSID result = NULL;
     PTOKEN_USER ptu;
     NTSTATUS status;
-    ULONG SidLength = 0, Length;
 
     status = NtQueryInformationToken(hProcessToken, TokenUser,
         NULL, 0, &SidLength);
@@ -768,10 +754,10 @@ PVOID supGetSystemInfo(
     _In_ SYSTEM_INFORMATION_CLASS SystemInformationClass
 )
 {
-    PVOID       buffer = NULL;
-    ULONG       bufferSize = PAGE_SIZE;
-    NTSTATUS    ntStatus;
-    ULONG       returnedLength = 0;
+    ULONG bufferSize = PAGE_SIZE;
+    NTSTATUS ntStatus;
+    ULONG returnedLength = 0;
+    PVOID buffer = NULL;
 
     buffer = supHeapAlloc((SIZE_T)bufferSize);
     if (buffer == NULL)
@@ -861,13 +847,11 @@ VOID supRunAsLocalSystem(
 )
 {
     BOOL bSuccess = FALSE;
-    NTSTATUS Status;
-    PVOID ProcessList;
-    ULONG SessionId = NtCurrentPeb()->SessionId, dummy;
-
-    HANDLE hSystemToken = NULL, hPrimaryToken = NULL, hImpersonationToken = NULL;
-
     BOOLEAN bThreadImpersonated = FALSE;
+    NTSTATUS Status;
+    ULONG SessionId = NtCurrentPeb()->SessionId, dummy;
+    PVOID ProcessList;
+    HANDLE hSystemToken = NULL, hPrimaryToken = NULL, hImpersonationToken = NULL;
 
     PROCESS_INFORMATION pi;
     STARTUPINFO si;
@@ -1103,7 +1087,7 @@ HANDLE supGetCurrentProcessToken(
 */
 NTSTATUS supMapImageNoExecute(
     _In_ PUNICODE_STRING ImagePath,
-    _Out_ PVOID* BaseAddress
+    _Out_ PVOID * BaseAddress
 )
 {
     NTSTATUS ntStatus = STATUS_UNSUCCESSFUL;
@@ -1269,6 +1253,37 @@ LPVOID supGetProcAddressEx(
 }
 
 /*
+* supAddressInImage
+*
+* Purpose:
+*
+* Check if the address is within mapped image.
+*
+*/
+BOOLEAN supAddressInImage(
+    _In_ PVOID ImageBase,
+    _In_ SIZE_T ImageSize,
+    _In_ PVOID Address,
+    _In_ SIZE_T Size
+)
+{
+    ULONG_PTR base, end, ptr, ptrEnd;
+
+    if (ImageBase == NULL || Address == NULL || ImageSize == 0)
+        return FALSE;
+
+    base = (ULONG_PTR)ImageBase;
+    end = base + ImageSize;
+    ptr = (ULONG_PTR)Address;
+    ptrEnd = ptr + Size;
+
+    if (ptr < base || ptrEnd < ptr || ptrEnd > end)
+        return FALSE;
+
+    return TRUE;
+}
+
+/*
 * supFindKiServiceTable
 *
 * Purpose:
@@ -1281,15 +1296,21 @@ BOOLEAN supFindKiServiceTable(
     _In_ PRAW_SERVICE_TABLE ServiceTable
 )
 {
+    ULONG c, p, SectionSize = 0, SectionVA = 0, offset;
     ULONG_PTR SectionPtr = 0;
+    SIZE_T imageSize;
     PBYTE ptrCode = (PBYTE)MappedImageBase;
+    PVOID ptrCount, ptrArgs, ptrTable;
     IMAGE_NT_HEADERS* NtHeaders = RtlImageNtHeader(MappedImageBase);
     IMAGE_SECTION_HEADER* SectionTableEntry;
-    ULONG c, p, SectionSize = 0, SectionVA = 0;
 
     const BYTE KiSystemServiceStartPattern[] = { 0x45, 0x33, 0xC9, 0x44, 0x8B, 0x05 };
 
     if (NtHeaders == NULL)
+        return FALSE;
+
+    imageSize = NtHeaders->OptionalHeader.SizeOfImage;
+    if (imageSize == 0)
         return FALSE;
 
     SectionTableEntry = (PIMAGE_SECTION_HEADER)((PCHAR)NtHeaders +
@@ -1336,14 +1357,31 @@ BOOLEAN supFindKiServiceTable(
         return FALSE;
 
     p += 3;
-    c = *((PULONG)(ptrCode + p + 3)) + 7 + p;
-    ServiceTable->CountOfEntries = *((PULONG)(ptrCode + c));
+    offset = *((PULONG)(ptrCode + p + 3));
+    c = offset + 7 + p;
+    ptrCount = (PVOID)(ptrCode + c);
+    if (!supAddressInImage(MappedImageBase, imageSize, ptrCount, sizeof(ULONG)))
+        return FALSE;
+
+    ServiceTable->CountOfEntries = *((PULONG)ptrCount);
+    if (ServiceTable->CountOfEntries == 0 || ServiceTable->CountOfEntries > MAX_SYSCALL_COUNT)
+        return FALSE;
+
     p += 7;
-    c = *((PULONG)(ptrCode + p + 3)) + 7 + p;
-    ServiceTable->StackArgumentTable = (PBYTE)ptrCode + c;
+    offset = *((PULONG)(ptrCode + p + 3));
+    c = offset + 7 + p;
+    ptrArgs = (PVOID)(ptrCode + c);
+    if (!supAddressInImage(MappedImageBase, imageSize, ptrArgs, ServiceTable->CountOfEntries)) //argument table is byte array
+        return FALSE;
+    ServiceTable->StackArgumentTable = (PBYTE)ptrArgs;
+
     p += 7;
-    c = *((PULONG)(ptrCode + p + 3)) + 7 + p;
-    ServiceTable->ServiceTable = (LPVOID*)(ptrCode + c);
+    offset = *((PULONG)(ptrCode + p + 3));
+    c = offset + 7 + p;
+    ptrTable = (PVOID)(ptrCode + c);
+    if (!supAddressInImage(MappedImageBase, imageSize, ptrTable, ServiceTable->CountOfEntries * sizeof(PVOID)))
+        return FALSE;
+    ServiceTable->ServiceTable = (LPVOID*)ptrTable;
 
     return TRUE;
 }
@@ -1416,7 +1454,7 @@ BOOL supIsComPort(
     _In_ LPCWSTR wsz
 )
 {
-    int i, portNum;
+    INT i, portNum;
 
     if (!wsz)
         return FALSE;
@@ -1450,4 +1488,33 @@ BOOL supIsComPort(
     }
 
     return (portNum >= 1 && portNum <= 255);
+}
+
+/*
+* supGetSyscallNumberFromNtdll
+*
+* Purpose:
+*
+* Return syscall index for syscall name.
+*
+*/
+ULONG supGetSyscallNumberFromNtdll(
+    _In_ LPCSTR RoutineName
+)
+{
+    PBYTE pfn;
+    HMODULE hNtdll;
+
+    hNtdll = GetModuleHandle(TEXT("ntdll.dll"));
+    if (hNtdll == NULL)
+        return ULONG_MAX;
+
+    pfn = (PBYTE)GetProcAddress(hNtdll, RoutineName);
+    if (pfn == NULL)
+        return ULONG_MAX;
+
+    if (*(PULONG)pfn != 0xb8d18b4c)
+        return ULONG_MAX;
+
+    return *(PULONG)(pfn + 4);
 }

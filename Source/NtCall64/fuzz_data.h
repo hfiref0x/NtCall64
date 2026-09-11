@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2025
+*  (C) COPYRIGHT AUTHORS, 2025 - 2026
 *
 *  TITLE:       FUZZ_DATA.H
 *
-*  VERSION:     2.01
+*  VERSION:     2.10
 *
-*  DATE:        02 Dec 2025
+*  DATE:        13 Jun 2026
 *
 *  Fuzzing data constants and Windows syscall database.
 *

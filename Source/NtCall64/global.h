@@ -4,9 +4,9 @@
 *
 *  TITLE:       GLOBAL.H
 *
-*  VERSION:     2.01
+*  VERSION:     2.10
 *
-*  DATE:        01 Apr 2026
+*  DATE:        09 Sep 2026
 *
 *  Global definitions.
 *
@@ -20,19 +20,6 @@
 
 #if !defined UNICODE
 #error ANSI build is not supported
-#endif
-
-#if defined (_MSC_VER)
-#if (_MSC_VER >= 1900)
-#ifdef _DEBUG
-#pragma comment(lib, "vcruntimed.lib")
-#pragma comment(lib, "ucrtd.lib")
-#pragma comment(lib, "ucrt.lib")
-#else
-#pragma comment(lib, "libucrt.lib")
-#pragma comment(lib, "libvcruntime.lib")
-#endif
-#endif
 #endif
 
 #pragma warning(disable: 4005)  // Macro redefinition
@@ -65,7 +52,6 @@ typedef struct _RAW_SERVICE_TABLE {
 #define WIN32U_DLL TEXT("win32u.dll")
 
 #include "sup.h"
-#include "log.h"
 
 typedef struct _CALL_PARAM {
     ULONG Syscall;
@@ -122,17 +108,29 @@ typedef enum _FUZZ_ALLOC_TYPE {
     AllocTypeSid
 } FUZZ_ALLOC_TYPE;
 
-#define MAX_FUZZING_ALLOCATIONS 32
+#define MAX_FUZZING_ALLOCATIONS 64
 typedef struct _FUZZ_MEMORY_TRACKER {
     volatile LONG Lock;
     ULONG Count;
     PVOID Addresses[MAX_FUZZING_ALLOCATIONS];
     FUZZ_ALLOC_TYPE Types[MAX_FUZZING_ALLOCATIONS];
     BOOLEAN InUse;
+    BOOLEAN Overflow;
+    ULONG Seed;
 } FUZZ_MEMORY_TRACKER, * PFUZZ_MEMORY_TRACKER;
+
+#include "fuzz.h"
+#include "log.h"
+#include "tests/tests.h"
+
+#ifdef __cplusplus 
+extern "C" {
+#endif
+    NTSTATUS ntSyscallGate(ULONG ServiceId, ULONG ArgumentCount, ULONG_PTR* Arguments);
+#ifdef __cplusplus
+}
+#endif
 
 extern NTCALL_CONTEXT g_ctx;
 extern NTCALL_LOG_PARAMS g_Log;
 extern __declspec(thread) FUZZ_MEMORY_TRACKER g_MemoryTracker;
-
-#include "fuzz.h"

@@ -25,6 +25,9 @@
     <Filter Include="Logger">
       <UniqueIdentifier>{f34dea7e-67c7-414d-a0bc-2369125b8d61}</UniqueIdentifier>
     </Filter>
+    <Filter Include="Tests">
+      <UniqueIdentifier>{acfa1d39-5822-4ea5-91d6-f52fd97ccc22}</UniqueIdentifier>
+    </Filter>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="main.c">
@@ -87,6 +90,12 @@
     <ClCompile Include="minirtl\_strncmp.c">
       <Filter>minirtl</Filter>
     </ClCompile>
+    <ClCompile Include="tests\tests.c">
+      <Filter>Tests</Filter>
+    </ClCompile>
+    <ClCompile Include="minirtl\_strchr.c">
+      <Filter>minirtl</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <ClInclude Include="ntos.h">
@@ -124,6 +133,9 @@
     </ClInclude>
     <ClInclude Include="log.h">
       <Filter>Logger</Filter>
+    </ClInclude>
+    <ClInclude Include="tests\tests.h">
+      <Filter>Tests</Filter>
     </ClInclude>
   </ItemGroup>
   <ItemGroup>

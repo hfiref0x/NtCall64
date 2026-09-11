@@ -4,9 +4,9 @@
 *
 *  TITLE:       MAIN.C
 *
-*  VERSION:     2.01
+*  VERSION:     2.10
 *
-*  DATE:        01 Apr 2026
+*  DATE:        09 Sep 2026
 *
 *  Program entry point.
 *
@@ -34,7 +34,7 @@
 #define DEFAULT_LOG_FILE    TEXT("ntcall64.log")
 
 #define WELCOME_BANNER      "Windows NT x64 syscall fuzzer, based on NtCall by Peter Kosyh."
-#define VERSION_BANNER      "Version 2.0.1 from 01 Apr 2026\r\n"
+#define VERSION_BANNER      "Version 2.1.0 from 09 Sep 2026\r\n"
 #define PSEUDO_GRAPHICS_BANNER "\
  _   _ _____ _____   ___   _      _       ____    ___ \n\
 | \\ | |_   _/  __ \\ / _ \\ | |    | |     / ___|  /   |\n\
@@ -48,16 +48,16 @@
 // Help output.
 //
 #define T_HELP	"Usage: -help [-win32k][-log [-o <file_or_port>]][-call Id][-pc Value][-wt Value][-s][-h]\r\n\
-  -help     - Show this help information\r\n\
-  -log      - Enable logging to file last call parameters (warning: this will drop performance)\r\n\
-  -o Value  - Output log destination (port name like COM1, COM2... or file name), default ntcall64.log (-log required)\r\n\
-  -win32k   - Fuzz win32k graphical subsystem table, otherwise fuzz ntos table\r\n\
-  -call Id  - Fuzz syscall by supplied numeric <Id> (can be from any table). All blacklists are ignored\r\n\
-  -pc Value - Set number of passes for each service to <Value>, default value 65536\r\n\
-  -wt Value - Set wait timeout for calling threads in seconds (except single syscall fuzzing), default value is 30\r\n\
-  -sc Value - Start fuzzing from service entry number (index from 0), default 0\r\n\
-  -h        - Enable heuristics when building syscall parameters\r\n\
-  -s        - Attempt to run program from LocalSystem account\r\n\n\
+  -help     - Show this help information.\r\n\
+  -log      - Enable logging to file last call parameters (warning: this will drop performance).\r\n\
+  -o Value  - Output log destination (port name like COM1, COM2... or file name), default ntcall64.log (-log required).\r\n\
+  -win32k   - Fuzz win32k graphical subsystem table, otherwise fuzz ntos table.\r\n\
+  -call Id  - Fuzz syscall by supplied numeric <Id> (can be from any table). All blacklists are ignored.\r\n\
+  -pc Value - Set number of passes for each service to <Value>, default value 65536.\r\n\
+  -wt Value - Set wait timeout for calling threads in seconds (except single syscall fuzzing), default value is 30.\r\n\
+  -sc Value - Start fuzzing from service entry number (index from 0), default 0.\r\n\
+  -h        - Enable heuristics when building syscall parameters.\r\n\
+  -s        - Attempt to run program from LocalSystem account.\r\n\n\
 Example: ntcall64.exe -win32k -log -o COM2"
 
 //
@@ -67,13 +67,13 @@ NTCALL_CONTEXT g_ctx;
 NTCALL_LOG_PARAMS g_Log;
 
 DWORD g_privs[] = {
-    SE_CREATE_TOKEN_PRIVILEGE, 
+    SE_CREATE_TOKEN_PRIVILEGE,
     SE_ASSIGNPRIMARYTOKEN_PRIVILEGE,
     SE_LOCK_MEMORY_PRIVILEGE,
     SE_INCREASE_QUOTA_PRIVILEGE,
     SE_MACHINE_ACCOUNT_PRIVILEGE,
     SE_TCB_PRIVILEGE,
-    SE_SECURITY_PRIVILEGE, 
+    SE_SECURITY_PRIVILEGE,
     SE_TAKE_OWNERSHIP_PRIVILEGE,
     SE_LOAD_DRIVER_PRIVILEGE,
     SE_SYSTEM_PROFILE_PRIVILEGE,
@@ -104,28 +104,6 @@ DWORD g_privs[] = {
 };
 
 /*
-* VehHandler
-*
-* Purpose:
-*
-* Vectored exception handler.
-*
-*/
-LONG CALLBACK VehHandler(
-    EXCEPTION_POINTERS* ExceptionInfo
-)
-{
-    DWORD64 ExitThreadPfn;
-    HMODULE hModule = GetModuleHandle(TEXT("kernel32.dll"));
-    if (hModule) {
-        ExitThreadPfn = (DWORD64)GetProcAddress(hModule, "ExitThread");
-        if (ExitThreadPfn)
-            ExceptionInfo->ContextRecord->Rip = ExitThreadPfn;
-    }
-    return EXCEPTION_CONTINUE_EXECUTION;
-}
-
-/*
 * FuzzInitPhase2
 *
 * Purpose:
@@ -133,12 +111,12 @@ LONG CALLBACK VehHandler(
 * Load system image, locate table and start fuzzing.
 *
 */
-UINT FuzzInitPhase2(
+INT FuzzInitPhase2(
     _In_ NTCALL_CONTEXT* Context
 )
 {
     BOOL probeWin32k;
-    UINT result = ERROR_SUCCESS;
+    INT result = 0;
     ULONG syscallEffectiveId;
 
     NTSTATUS ntStatus;
@@ -156,28 +134,28 @@ UINT FuzzInitPhase2(
 
     if (!NT_SUCCESS(ntStatus) || (Context->SystemModuleBase == NULL)) {
         supShowErrorOrNtStatus("[!] Could not preload system image, abort!", ntStatus);
-        return (UINT)-4;
+        return -4;
     }
 
     if (probeWin32k) {
         if (!supFindW32pServiceTable(Context->SystemModuleBase, &Context->ServiceTable)) {
             ConsoleShowMessage("[!] Could not find W32pServiceTable, abort!", TEXT_COLOR_RED);
-            result = (UINT)-5;
+            result = -5;
         }
         if (!FuzzLookupWin32kNames(Context)) {
             ConsoleShowMessage("[!] Win32k names query error, abort!", TEXT_COLOR_RED);
-            result = (UINT)-6;
+            result = -6;
         }
     }
     else {
         Context->NtdllBase = (PVOID)GetModuleHandle(TEXT("ntdll.dll"));
         if (Context->NtdllBase == NULL) {
             ConsoleShowMessage("[!] NTDLL not found, abort!", TEXT_COLOR_RED);
-            result = (UINT)-7;
+            result = -7;
         }
         if (!supFindKiServiceTable(Context->SystemModuleBase, &Context->ServiceTable)) {
             ConsoleShowMessage("[!] KiServiceTable not found, abort!", TEXT_COLOR_RED);
-            result = (UINT)-8;
+            result = -8;
         }
     }
 
@@ -192,7 +170,7 @@ UINT FuzzInitPhase2(
             }
             if (syscallEffectiveId >= Context->ServiceTable.CountOfEntries) {
                 ConsoleShowMessage("[!] Syscall number exceeds current system available range.", TEXT_COLOR_RED);
-                result = (UINT)-9;
+                result = -9;
             }
         }
         if (result == ERROR_SUCCESS)
@@ -213,14 +191,14 @@ UINT FuzzInitPhase2(
 * Initial preparations for probing.
 *
 */
-UINT FuzzInitPhase1(
+INT FuzzInitPhase1(
     _In_ NTCALL_FUZZ_PARAMS* FuzzParams
 )
 {
-    UINT enabled = 0, result = 0;
+    INT result = 0;
+    UINT enabled = 0, i;
     BOOLEAN LogEnabled = FALSE;
     BOOLEAN bWasEnabled = FALSE;
-    UINT i;
 
     CHAR szOut[2048];
     CHAR szCurrentDir[MAX_PATH + 1];
@@ -259,7 +237,7 @@ UINT FuzzInitPhase1(
     GetCurrentDirectoryA(MAX_PATH, szCurrentDir);
     StringCchPrintfA(szOut, ARRAYSIZE(szOut), "[~] Base configuration\nCurrent directory: %s\nCommand line: %s\n"\
         "Pass count: %llu per each syscall\n"\
-        "Thread timeout: %lu sec\nParam heuristics: %s", 
+        "Thread timeout: %lu sec\nParam heuristics: %s",
         szCurrentDir,
         GetCommandLineA(),
         g_ctx.SyscallPassCount,
@@ -323,7 +301,7 @@ UINT FuzzInitPhase1(
     // unusual restrictions or a non-admin context.
     if (enabled < (_countof(g_privs) / 2)) {
         StringCchPrintfA(szOut, ARRAYSIZE(szOut),
-            "[~] Warning: Only a minority of privileges were enabled (%lu/%llu)", 
+            "[~] Warning: Only a minority of privileges were enabled (%lu/%llu)",
             enabled, _countof(g_privs));
         ConsoleShowMessage(szOut, TEXT_COLOR_YELLOW);
     }
@@ -366,11 +344,11 @@ UINT FuzzInitPhase1(
 * Parse command line options.
 *
 */
-UINT FuzzInitPhase0(
+INT FuzzInitPhase0(
     VOID
 )
 {
-    UINT result = 0;
+    INT result = 0;
     ULONG rLen;
     NTCALL_FUZZ_PARAMS fuzzParams;
     HANDLE hToken;
@@ -406,14 +384,14 @@ UINT FuzzInitPhase0(
             }
             else {
                 supShowErrorOrNtStatus("[!] Failed to query process token information", ntStatus);
-                return (UINT)-2;
+                return -2;
             }
 
             NtClose(hToken);
         }
         else {
             supShowErrorOrNtStatus("[!] Failed to open self process token", ntStatus);
-            return (UINT)-3;
+            return -3;
         }
 
         // -s (System) param.   
@@ -442,12 +420,12 @@ UINT FuzzInitPhase0(
         if (fuzzParams.LogEnabled) {
             rLen = 0;
             RtlSecureZeroMemory(szTextBuf, sizeof(szTextBuf));
-            if (supGetParamOption(commandLine, 
-                PARAM_OUTPUT, 
-                TRUE, 
-                szTextBuf, 
-                RTL_NUMBER_OF(szTextBuf), 
-                &rLen) && rLen) 
+            if (supGetParamOption(commandLine,
+                PARAM_OUTPUT,
+                TRUE,
+                szTextBuf,
+                RTL_NUMBER_OF(szTextBuf),
+                &rLen) && rLen)
             {
                 _strcpy(fuzzParams.szLogDeviceOrFile, szTextBuf);
             }
@@ -467,11 +445,11 @@ UINT FuzzInitPhase0(
         // -call (SyscallId) param.
         rLen = 0;
         RtlSecureZeroMemory(szTextBuf, sizeof(szTextBuf));
-        if (supGetParamOption(commandLine, 
+        if (supGetParamOption(commandLine,
             PARAM_SYSCALL,
-            TRUE, 
-            szTextBuf, 
-            RTL_NUMBER_OF(szTextBuf), 
+            TRUE,
+            szTextBuf,
+            RTL_NUMBER_OF(szTextBuf),
             &rLen) && rLen)
         {
             fuzzParams.ProbeSingleSyscall = TRUE;
@@ -482,7 +460,7 @@ UINT FuzzInitPhase0(
             // -start (SyscallId) param.
             rLen = 0;
             RtlSecureZeroMemory(szTextBuf, sizeof(szTextBuf));
-            if (supGetParamOption(commandLine, 
+            if (supGetParamOption(commandLine,
                 PARAM_SYSCALL_START,
                 TRUE,
                 szTextBuf,
@@ -497,11 +475,11 @@ UINT FuzzInitPhase0(
         // -pc (PassCount) param.
         rLen = 0;
         RtlSecureZeroMemory(szTextBuf, sizeof(szTextBuf));
-        if (supGetParamOption(commandLine, 
+        if (supGetParamOption(commandLine,
             PARAM_PASSCOUNT,
-            TRUE, 
-            szTextBuf, 
-            RTL_NUMBER_OF(szTextBuf), 
+            TRUE,
+            szTextBuf,
+            RTL_NUMBER_OF(szTextBuf),
             &rLen) && rLen)
         {
             fuzzParams.SyscallPassCount = strtou64(szTextBuf);
@@ -517,10 +495,10 @@ UINT FuzzInitPhase0(
 
         // -wt (WaitTimeout) param.
         RtlSecureZeroMemory(szTextBuf, sizeof(szTextBuf));
-        if (supGetParamOption(commandLine, 
+        if (supGetParamOption(commandLine,
             PARAM_WAITTIMEOUT,
-            TRUE, 
-            szTextBuf, 
+            TRUE,
+            szTextBuf,
             RTL_NUMBER_OF(szTextBuf),
             &rLen) && rLen)
         {
@@ -554,24 +532,27 @@ UINT FuzzInitPhase0(
 * Program main, process command line options and run fuzzing.
 *
 */
-UINT NtCall64Main()
+int main()
 {
-    UINT result = 0;
-    PVOID ExceptionHandler;
+    INT result = 0;
 
     if (!ConsoleInit())
-        return (UINT)-1;
+        return -1;
 
     ConsoleShowMessage(PSEUDO_GRAPHICS_BANNER, TEXT_COLOR_CYAN);
     ConsoleShowMessage(WELCOME_BANNER, TEXT_COLOR_CYAN);
     ConsoleShowMessage(VERSION_BANNER, TEXT_COLOR_CYAN);
 
 #ifdef _DEBUG
+    if (!RunSyscallGateTests()) {
+        ConsoleShowMessage("[!] Syscall gate self-test failed", TEXT_COLOR_RED);
+        return -1;
+    }
+    ConsoleShowMessage("[+] Syscall gate self-test passed", TEXT_COLOR_CYAN);
     if (VerifySyscallDatabaseIntegrity(0) && VerifySyscallDatabaseSorted(0))
         DbgPrint("KnownNtSyscalls OK\n");
     else
         DbgPrint("KnownNtSyscalls BAD\n");
-
 
     if (VerifySyscallDatabaseIntegrity(1) && VerifySyscallDatabaseSorted(1))
         DbgPrint("KnownWin32kSyscalls OK\n");
@@ -579,53 +560,17 @@ UINT NtCall64Main()
         DbgPrint("KnownWin32kSyscalls BAD\n");
 #endif
 
-    ExceptionHandler = RtlAddVectoredExceptionHandler(1, &VehHandler);
-    if (ExceptionHandler) {
+    do {
+        if (supGetParamOption(GetCommandLine(), PARAM_HELP, FALSE, NULL, 0, NULL)) {
+            ConsoleShowMessage(T_HELP, 0);
+            break;
+        }
 
-        do {           
-            if (supGetParamOption(GetCommandLine(), PARAM_HELP, FALSE, NULL, 0, NULL)) {
-                ConsoleShowMessage(T_HELP, 0);
-                break;
-            }
+        result = FuzzInitPhase0();
+        ConsoleShowMessage("Bye!", 0);
 
-            result = FuzzInitPhase0();
-            ConsoleShowMessage("Bye!", 0);
+    } while (FALSE);
 
-        } while (FALSE);
-
-        RtlRemoveVectoredExceptionHandler(ExceptionHandler);
-    }
 
     return result;
 }
-
-/*
-* main
-*
-* Purpose:
-*
-* Program EntryPoint.
-*
-*/
-#if !defined(__cplusplus)
-#pragma comment(linker, "/ENTRY:main")
-void main()
-{
-    ExitProcess(NtCall64Main());
-}
-#else
-#pragma comment(linker, "/ENTRY:WinMain")
-int CALLBACK WinMain(
-    _In_ HINSTANCE hInstance,
-    _In_opt_ HINSTANCE hPrevInstance,
-    _In_ LPSTR     lpCmdLine,
-    _In_ int       nCmdShow
-)
-{
-    UNREFERENCED_PARAMETER(hInstance);
-    UNREFERENCED_PARAMETER(hPrevInstance);
-    UNREFERENCED_PARAMETER(lpCmdLine);
-    UNREFERENCED_PARAMETER(nCmdShow);
-    ExitProcess(NtCall64Main());
-}
-#endif

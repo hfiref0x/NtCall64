@@ -1,12 +1,12 @@
 /*******************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2016 - 2025
+*  (C) COPYRIGHT AUTHORS, 2016 - 2026
 *
 *  TITLE:       LOG.H
 *
-*  VERSION:     2.00
+*  VERSION:     2.10
 *
-*  DATE:        27 Jun 2025
+*  DATE:        09 Sep 2026
 *
 *  Log support header file.
 *
@@ -19,17 +19,27 @@
 
 #pragma once
 
-#define NC64_LOG_MAX_ARGS 16
+#define NC64_LOG_MAX_ARGS MAX_PARAMETERS
+#define NC64_LOG_SIGNATURE '46CN'
+#define NC64_LOG_VERSION   1
+
+#define NC64_LOG_FLAG_WIN32K     0x00000001
+#define NC64_LOG_FLAG_HEURISTIC  0x00000002
 
 typedef struct _NTCALL_LOG_PARAMS {
     BOOL LogToFile;
+    BOOL FailureReported;
     HANDLE LogHandle;
 } NTCALL_LOG_PARAMS, * PNTCALL_LOG_PARAMS;
 
 #pragma pack(push, 1)
 typedef struct _NC64_SYSCALL_LOG_ENTRY {
+    ULONG Signature;
+    ULONG Version;
+    ULONG Flags;
     ULONG SyscallNumber;
     ULONG ArgCount;
+    ULONG StoredArgCount;
     ULONG_PTR Arguments[NC64_LOG_MAX_ARGS];
 } NC64_SYSCALL_LOG_ENTRY, * PNC64_SYSCALL_LOG_ENTRY;
 #pragma pack(pop)

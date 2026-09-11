@@ -4,9 +4,9 @@
 *
 *  TITLE:       FUZZ_PARAM.C
 *
-*  VERSION:     2.01
+*  VERSION:     2.10
 *
-*  DATE:        01 Apr 2026
+*  DATE:        09 Sep 2026
 *
 *  Parameter type detection and structure generation for syscall fuzzing.
 *
@@ -23,33 +23,55 @@
 __declspec(thread) FUZZ_MEMORY_TRACKER g_MemoryTracker;
 __declspec(thread) BYTE g_FuzzStructBuffer[FUZZ_PARAM_BUFFER_SIZE];
 
+ULONG FuzzRandom(
+    VOID
+)
+{
+    ULONG x;
+
+    x = g_MemoryTracker.Seed;
+    if (x == 0) {
+        x = (ULONG)__rdtsc();
+        x ^= GetCurrentThreadId();
+        x ^= GetCurrentProcessId();
+        if (x == 0)
+            x = 0xA5A5A5A5;
+        g_MemoryTracker.Seed = x;
+    }
+
+    x ^= (x << 13);
+    x ^= (x >> 17);
+    x ^= (x << 5);
+
+    g_MemoryTracker.Seed = x;
+    return x;
+}
+
 #ifdef _DEBUG
 BOOL VerifySyscallDatabaseSorted(UINT DbType)
 {
-    SYSCALL_PARAM_INFO* Database = (DbType == 0) ? (SYSCALL_PARAM_INFO*)KnownNtSyscalls : (SYSCALL_PARAM_INFO*)KnownWin32kSyscalls;
-    SYSCALL_PARAM_INFO* prev = Database;
-    SYSCALL_PARAM_INFO* curr = Database + 1;
+    ULONG i;
+    SYSCALL_PARAM_INFO* Database;
 
-    while (curr->Name != NULL) {
-        if (_strcmpi_a(prev->Name, curr->Name) > 0) {
-            OutputDebugStringA(prev->Name);
+    Database = (DbType == 0) ? (SYSCALL_PARAM_INFO*)KnownNtSyscalls : (SYSCALL_PARAM_INFO*)KnownWin32kSyscalls;
+
+    for (i = 1; Database[i].Name != NULL; i++) {
+        if (_strcmpi_a(Database[i - 1].Name, Database[i].Name) > 0) {
+            OutputDebugStringA(Database[i - 1].Name);
             OutputDebugStringA("\n");
             return FALSE;
         }
-        prev = curr;
-        curr++;
     }
+
     return TRUE;
 }
 
 BOOL VerifySyscallDatabaseIntegrity(UINT DbType)
 {
+    ULONG i;
     SYSCALL_PARAM_INFO* Database;
-    ULONG i, j;
 
-    Database = (DbType == 0) ?
-        (SYSCALL_PARAM_INFO*)KnownNtSyscalls :
-    (SYSCALL_PARAM_INFO*)KnownWin32kSyscalls;
+    Database = (DbType == 0) ? (SYSCALL_PARAM_INFO*)KnownNtSyscalls : (SYSCALL_PARAM_INFO*)KnownWin32kSyscalls;
 
     for (i = 0; Database[i].Name != NULL; i++) {
 
@@ -58,8 +80,8 @@ BOOL VerifySyscallDatabaseIntegrity(UINT DbType)
             return FALSE;
         }
 
-        for (j = i + 1; Database[j].Name != NULL; j++) {
-            if (_strcmpi_a(Database[i].Name, Database[j].Name) == 0) {
+        if (i > 0) {
+            if (_strcmpi_a(Database[i - 1].Name, Database[i].Name) == 0) {
                 OutputDebugStringA("Duplicate syscall entry found in database\n");
                 OutputDebugStringA(Database[i].Name);
                 OutputDebugStringA("\n");
@@ -94,7 +116,7 @@ LPCSTR FuzzSkipSyscallPrefix(
     return SyscallName;
 }
 
-static BOOL FuzzHasVerbPrefix(
+BOOL FuzzHasVerbPrefix(
     _In_ LPCSTR SyscallName,
     _In_ LPCSTR Verb
 )
@@ -108,7 +130,7 @@ static BOOL FuzzHasVerbPrefix(
     return (_strncmp_a(namePart, Verb, _strlen_a(Verb)) == 0);
 }
 
-static BOOL FuzzHasTerm(
+BOOL FuzzHasTerm(
     _In_ LPCSTR SyscallName,
     _In_ LPCSTR Term
 )
@@ -119,7 +141,7 @@ static BOOL FuzzHasTerm(
     return (_strstr_a(SyscallName, Term) != NULL);
 }
 
-static PBYTE FuzzGetParameterStructSlot(
+PBYTE FuzzGetParameterStructSlot(
     _In_ PBYTE BufferBase,
     _In_ ULONG ParameterIndex
 )
@@ -130,6 +152,14 @@ static PBYTE FuzzGetParameterStructSlot(
     return BufferBase + (ParameterIndex * FUZZ_PARAM_SLOT_SIZE);
 }
 
+SIZE_T FuzzGetRemainingSlotSize(
+    _In_ ULONG ParameterIndex
+)
+{
+    UNREFERENCED_PARAMETER(ParameterIndex);
+    return FUZZ_PARAM_SLOT_SIZE;
+}
+
 /*
 * FuzzTrackAllocation
 *
@@ -138,13 +168,13 @@ static PBYTE FuzzGetParameterStructSlot(
 * Track allocated memory so it can be freed even if the stack is corrupted.
 *
 */
-VOID FuzzTrackAllocation(
+BOOLEAN FuzzTrackAllocation(
     _In_ PVOID Address,
     _In_ FUZZ_ALLOC_TYPE Type
 )
 {
     if (Address == NULL)
-        return;
+        return FALSE;
 
     while (InterlockedCompareExchange(&g_MemoryTracker.Lock, 1, 0) != 0) {
         YieldProcessor();
@@ -154,9 +184,13 @@ VOID FuzzTrackAllocation(
         g_MemoryTracker.Addresses[g_MemoryTracker.Count] = Address;
         g_MemoryTracker.Types[g_MemoryTracker.Count] = Type;
         g_MemoryTracker.Count++;
+        InterlockedExchange(&g_MemoryTracker.Lock, 0);
+        return TRUE;
     }
 
+    g_MemoryTracker.Overflow = TRUE;
     InterlockedExchange(&g_MemoryTracker.Lock, 0);
+    return FALSE;
 }
 /*
 * FuzzCleanupAllocations
@@ -194,7 +228,7 @@ VOID FuzzCleanupAllocations()
     }
     g_MemoryTracker.Count = 0;
     g_MemoryTracker.InUse = FALSE;
-
+    g_MemoryTracker.Overflow = FALSE;
     InterlockedExchange(&g_MemoryTracker.Lock, 0);
 }
 
@@ -214,7 +248,7 @@ SYSCALL_LOOKUP_RESULT FuzzSyscallBinarySearch(
     _Out_ PARAM_TYPE_HINT* TypeHint
 )
 {
-    int left, right, mid, result;
+    INT left, right, mid, result;
 
     if (TypeHint == NULL)
         return SyscallLookupNotFound;
@@ -222,7 +256,7 @@ SYSCALL_LOOKUP_RESULT FuzzSyscallBinarySearch(
     *TypeHint = ParamTypeGeneral;
 
     left = 0;
-    right = (int)DatabaseCount - 1;
+    right = (INT)DatabaseCount - 1;
 
     while (left <= right) {
         mid = left + ((right - left) / 2);
@@ -893,6 +927,154 @@ PARAM_TYPE_HINT FuzzDetermineParameterTypeHeuristic(
     }
 }
 
+NTSTATUS NTAPI FuzzSafeThreadStart(
+    _In_opt_ PVOID Parameter
+)
+{
+    UNREFERENCED_PARAMETER(Parameter);
+    return STATUS_SUCCESS;
+}
+
+BOOL FuzzBuildNtCreateThreadExArguments(
+    _Out_writes_(11) ULONG_PTR* Arguments,
+    _In_ PBYTE FuzzStructBuffer
+)
+{
+    ULONG mutateIndex;
+    SIZE_T stackSize;
+    SIZE_T maximumStackSize;
+    HANDLE* pThreadHandle;
+    OBJECT_ATTRIBUTES* pObjectAttributes;
+    ULONG_PTR createFlags;
+
+    if (Arguments == NULL || FuzzStructBuffer == NULL)
+        return FALSE;
+
+    RtlSecureZeroMemory(Arguments, sizeof(ULONG_PTR) * 11);
+
+    pThreadHandle = (HANDLE*)FuzzGetParameterStructSlot(FuzzStructBuffer, 0);
+    if (pThreadHandle == NULL)
+        return FALSE;
+    *pThreadHandle = NULL;
+
+    pObjectAttributes = (OBJECT_ATTRIBUTES*)FuzzGetParameterStructSlot(FuzzStructBuffer, 2);
+    if (pObjectAttributes)
+        RtlSecureZeroMemory(pObjectAttributes, sizeof(OBJECT_ATTRIBUTES));
+
+    createFlags = 0x00000001ui64;
+    stackSize = 0;
+    maximumStackSize = 0;
+
+    Arguments[0] = (ULONG_PTR)pThreadHandle;
+    Arguments[1] = (ULONG_PTR)THREAD_ALL_ACCESS;
+    Arguments[2] = 0;
+    Arguments[3] = (ULONG_PTR)NtCurrentProcess();
+    Arguments[4] = (ULONG_PTR)FuzzSafeThreadStart;
+    Arguments[5] = 0;
+    Arguments[6] = createFlags;
+    Arguments[7] = (ULONG_PTR)0;
+    Arguments[8] = (ULONG_PTR)stackSize;
+    Arguments[9] = (ULONG_PTR)maximumStackSize;
+    Arguments[10] = 0;
+
+    mutateIndex = FuzzRandom() % 8;
+
+    switch (mutateIndex) {
+
+    case 0:
+        Arguments[1] = FuzzAccessData[FuzzRandom() % FUZZACCESS_COUNT];
+        break;
+
+    case 1:
+        if (pObjectAttributes) {
+            pObjectAttributes->Length = sizeof(OBJECT_ATTRIBUTES);
+            pObjectAttributes->RootDirectory = NULL;
+            pObjectAttributes->ObjectName = NULL;
+            pObjectAttributes->Attributes = (ULONG)FuzzAttrData[FuzzRandom() % FUZZATTR_COUNT];
+            pObjectAttributes->SecurityDescriptor = NULL;
+            pObjectAttributes->SecurityQualityOfService = NULL;
+            Arguments[2] = (ULONG_PTR)pObjectAttributes;
+        }
+        break;
+
+    case 2:
+    {
+        static const ULONG_PTR safeCreateFlags[] = {
+            0x00000001ui64,
+            0x00000001ui64 | 0x00000004ui64,
+            0x00000001ui64 | 0x00000040ui64,
+            0x00000001ui64 | 0x00000080ui64
+        };
+
+        Arguments[6] = safeCreateFlags[FuzzRandom() % RTL_NUMBER_OF(safeCreateFlags)];
+        break;
+    }
+
+    case 3:
+    {
+        static const ULONG_PTR zeroBitsValues[] = {
+            0,
+            1,
+            0x10,
+            0x20,
+            0x1000
+        };
+
+        Arguments[7] = zeroBitsValues[FuzzRandom() % RTL_NUMBER_OF(zeroBitsValues)];
+        break;
+    }
+
+    case 4:
+    {
+        static const SIZE_T stackSizes[] = {
+            0,
+            0x1000,
+            0x2000,
+            0x4000,
+            0x10000
+        };
+
+        Arguments[8] = (ULONG_PTR)stackSizes[FuzzRandom() % RTL_NUMBER_OF(stackSizes)];
+        break;
+    }
+
+    case 5:
+    {
+        static const SIZE_T maxStackSizes[] = {
+            0,
+            0x1000,
+            0x4000,
+            0x10000,
+            0x40000
+        };
+
+        Arguments[9] = (ULONG_PTR)maxStackSizes[FuzzRandom() % RTL_NUMBER_OF(maxStackSizes)];
+        break;
+    }
+
+    case 6:
+    {
+        static const ULONG_PTR safeArguments[] = {
+            0,
+            1,
+            0x1234,
+            0x10000
+        };
+
+        Arguments[5] = safeArguments[FuzzRandom() % RTL_NUMBER_OF(safeArguments)];
+        break;
+    }
+
+    case 7:
+        if ((FuzzRandom() % 4) == 0)
+            Arguments[0] = 0;
+        break;
+    }
+
+    Arguments[6] |= 0x00000001ui64;
+    return TRUE;
+}
+
 /*
 * FuzzGenerateParameter
 *
@@ -906,7 +1088,7 @@ ULONG_PTR FuzzGenerateParameter(
     _In_ PARAM_TYPE_HINT TypeHint,
     _In_ BOOL IsWin32kSyscall,
     _In_ BOOL EnableParamsHeuristic,
-    _In_ PBYTE FuzzStructBuffer
+    _In_opt_ PBYTE FuzzStructBuffer
 )
 {
     ULONG variation;
@@ -914,17 +1096,15 @@ ULONG_PTR FuzzGenerateParameter(
 
     structSlot = FuzzGetParameterStructSlot(FuzzStructBuffer, ParameterIndex);
 
-    // If heuristics is disabled return random data
     if (!EnableParamsHeuristic) {
-        return FuzzData[__rdtsc() % FUZZDATA_COUNT];
+        return FuzzData[FuzzRandom() % FUZZDATA_COUNT];
     }
 
-    variation = (ULONG)(__rdtsc() % 20);
+    variation = FuzzRandom() % 20;
     if (variation == 0) {
-        return FuzzData[__rdtsc() % FUZZDATA_COUNT]; // 5% chance of using general fuzz data
+        return FuzzData[FuzzRandom() % FUZZDATA_COUNT];
     }
 
-    // For the rest, use type-specific generation
     switch (TypeHint) {
     case ParamTypeAddress:
     {
@@ -945,17 +1125,9 @@ ULONG_PTR FuzzGenerateParameter(
         ULONG bufferSize;
         PBYTE buffer;
 
-        //
-        // Mix for pointer-like parameters:
-        //  - often a valid writable allocation
-        //  - sometimes NULL
-        //  - sometimes a slightly malformed pointer derived from valid memory
-        //  - sometimes a known bad fuzz address
-        //
-        addressMode = (ULONG)(__rdtsc() % 10);
+        addressMode = FuzzRandom() % 10;
 
         switch (addressMode) {
-
         case 0:
             return 0;
 
@@ -965,27 +1137,23 @@ ULONG_PTR FuzzGenerateParameter(
         case 4:
         case 5:
         case 6:
-            bufferSize = addressBufferSizes[__rdtsc() % _countof(addressBufferSizes)];
+            bufferSize = addressBufferSizes[FuzzRandom() % _countof(addressBufferSizes)];
             buffer = (PBYTE)VirtualAlloc(NULL, bufferSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
             if (buffer) {
                 RtlSecureZeroMemory(buffer, bufferSize);
-                FuzzTrackAllocation(buffer, AllocTypeVirtualAlloc);
+                if (!FuzzTrackAllocation(buffer, AllocTypeVirtualAlloc)) {
+                    VirtualFree(buffer, 0, MEM_RELEASE);
+                    return 0;
+                }
 
-                //
-                // Seed some small buffers with recognizable values.
-                //
                 if (bufferSize >= sizeof(ULONG_PTR)) {
-                    if ((__rdtsc() % 3) == 0) {
-                        *(PULONG_PTR)buffer = FuzzData[__rdtsc() % FUZZDATA_COUNT];
+                    if ((FuzzRandom() % 3) == 0) {
+                        *(PULONG_PTR)buffer = FuzzData[FuzzRandom() % FUZZDATA_COUNT];
                     }
                 }
 
-                //
-                // Sometimes return a slightly shifted pointer into valid memory.
-                // For exercising offset/misalignment handling.
-                //
-                if (bufferSize > 16 && (__rdtsc() % 5) == 0) {
-                    return (ULONG_PTR)(buffer + ((__rdtsc() % 8) + 1));
+                if (bufferSize > 16 && (FuzzRandom() % 5) == 0) {
+                    return (ULONG_PTR)(buffer + ((FuzzRandom() % 8) + 1));
                 }
 
                 return (ULONG_PTR)buffer;
@@ -993,14 +1161,14 @@ ULONG_PTR FuzzGenerateParameter(
             break;
 
         case 7:
-            bufferSize = addressBufferSizes[__rdtsc() % _countof(addressBufferSizes)];
+            bufferSize = addressBufferSizes[FuzzRandom() % _countof(addressBufferSizes)];
             buffer = (PBYTE)VirtualAlloc(NULL, bufferSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
             if (buffer) {
-                FuzzTrackAllocation(buffer, AllocTypeVirtualAlloc);
+                if (!FuzzTrackAllocation(buffer, AllocTypeVirtualAlloc)) {
+                    VirtualFree(buffer, 0, MEM_RELEASE);
+                    return 0;
+                }
 
-                //
-                // Intentionally do not fully zero this one, but initialize edges.
-                //
                 if (bufferSize >= sizeof(ULONG_PTR)) {
                     *(PULONG_PTR)buffer = 0x4141414141414141ui64;
                 }
@@ -1011,26 +1179,22 @@ ULONG_PTR FuzzGenerateParameter(
                 return (ULONG_PTR)buffer;
             }
             break;
-
-        case 8:
-        case 9:
-        default:
-            break;
         }
 
-        return FuzzAddrData[__rdtsc() % FUZZADDR_COUNT];
+        return FuzzAddrData[FuzzRandom() % FUZZADDR_COUNT];
     }
+
     case ParamTypeHandle:
-        return FuzzHandleData[__rdtsc() % FUZZHANDLE_COUNT];
+        return FuzzHandleData[FuzzRandom() % FUZZHANDLE_COUNT];
 
     case ParamTypeStatus:
         if (variation < 5 && structSlot) {
-            return (ULONG_PTR)CreateFuzzedIoStatusBlock(structSlot);
+            return (ULONG_PTR)CreateFuzzedIoStatusBlock(structSlot, FuzzGetRemainingSlotSize(ParameterIndex));
         }
-        return FuzzStatusData[__rdtsc() % FUZZSTATUS_COUNT];
+        return FuzzStatusData[FuzzRandom() % FUZZSTATUS_COUNT];
 
     case ParamTypeAccess:
-        return FuzzAccessData[__rdtsc() % FUZZACCESS_COUNT];
+        return FuzzAccessData[FuzzRandom() % FUZZACCESS_COUNT];
 
     case ParamTypeFlag:
         if (variation < 15) {
@@ -1041,14 +1205,14 @@ ULONG_PTR FuzzGenerateParameter(
             ULONG maxBits;
             ULONG i;
 
-            numBits = (ULONG)(__rdtsc() % 3) + 1;
+            numBits = (FuzzRandom() % 3) + 1;
             result = 0;
             usedBits = 0;
             maxBits = (ULONG)(sizeof(ULONG_PTR) * 8);
 
             for (i = 0; i < numBits; i++) {
                 do {
-                    bit = (ULONG)(__rdtsc() % maxBits);
+                    bit = FuzzRandom() % maxBits;
                 } while (usedBits & ((ULONG_PTR)1 << bit));
 
                 usedBits |= ((ULONG_PTR)1 << bit);
@@ -1057,41 +1221,41 @@ ULONG_PTR FuzzGenerateParameter(
 
             return result;
         }
-        return FuzzData[__rdtsc() % FUZZDATA_COUNT];
+        return FuzzData[FuzzRandom() % FUZZDATA_COUNT];
 
     case ParamTypeUnicodeStr:
-        return structSlot ? (ULONG_PTR)CreateFuzzedUnicodeString(structSlot) : 0;
+        return structSlot ? (ULONG_PTR)CreateFuzzedUnicodeString(structSlot, FuzzGetRemainingSlotSize(ParameterIndex)) : 0;
 
     case ParamTypeObjectAttr:
-        return structSlot ? (ULONG_PTR)CreateFuzzedObjectAttributes(structSlot) : 0;
+        return structSlot ? (ULONG_PTR)CreateFuzzedObjectAttributes(structSlot, FuzzGetRemainingSlotSize(ParameterIndex)) : 0;
 
     case ParamTypeToken:
-        return FuzzTokenData[__rdtsc() % FUZZTOKEN_COUNT];
+        return FuzzTokenData[FuzzRandom() % FUZZTOKEN_COUNT];
 
     case ParamTypePrivilege:
-        return structSlot ? (ULONG_PTR)CreateFuzzedTokenPrivileges(structSlot) : 0;
+        return structSlot ? (ULONG_PTR)CreateFuzzedTokenPrivileges(structSlot, FuzzGetRemainingSlotSize(ParameterIndex)) : 0;
 
     case ParamTypeInfoClass:
-        return FuzzInfoClassData[__rdtsc() % FUZZINFOCLASS_COUNT];
+        return FuzzInfoClassData[FuzzRandom() % FUZZINFOCLASS_COUNT];
 
     case ParamTypeBufferSize:
-        return FuzzBufSizeData[__rdtsc() % FUZZBUFSIZE_COUNT];
+        return FuzzBufSizeData[FuzzRandom() % FUZZBUFSIZE_COUNT];
 
     case ParamTypeTimeout:
         if (variation < 15) {
-            return structSlot ? (ULONG_PTR)CreateFuzzedLargeInteger(structSlot) : 0;
+            return structSlot ? (ULONG_PTR)CreateFuzzedLargeInteger(structSlot, FuzzGetRemainingSlotSize(ParameterIndex)) : 0;
         }
         else {
             static const ULONG timeoutValues[] = {
                 0, 1, 10, 100, 1000, 10000, 60000,
                 0x7FFFFFFF, 0xFFFFFFFF, 0x80000000
             };
-            return timeoutValues[__rdtsc() % _countof(timeoutValues)];
+            return timeoutValues[FuzzRandom() % _countof(timeoutValues)];
         }
 
     case ParamTypeRetLength:
-        if ((__rdtsc() % 10) == 0) {
-            return 0; // NULL 10% of the time
+        if ((FuzzRandom() % 10) == 0) {
+            return 0;
         }
         else {
             PULONG pLength;
@@ -1101,23 +1265,26 @@ ULONG_PTR FuzzGenerateParameter(
 
             if (pLength) {
                 *pLength = 0;
-                FuzzTrackAllocation(pLength, AllocTypeVirtualAlloc);
+                if (!FuzzTrackAllocation(pLength, AllocTypeVirtualAlloc)) {
+                    VirtualFree(pLength, 0, MEM_RELEASE);
+                    return 0;
+                }
                 return (ULONG_PTR)pLength;
             }
             return 0;
         }
 
     case ParamTypeWinHandle:
-        return FuzzWin32Data[__rdtsc() % FUZZWIN32_COUNT];
+        return FuzzWin32Data[FuzzRandom() % FUZZWIN32_COUNT];
 
     case ParamTypeGdiHandle:
-        return FuzzGdiData[__rdtsc() % FUZZGDI_COUNT];
+        return FuzzGdiData[FuzzRandom() % FUZZGDI_COUNT];
 
     case ParamTypeSecDesc:
-        return structSlot ? (ULONG_PTR)CreateFuzzedSecurityDescriptor(structSlot) : 0;
+        return structSlot ? (ULONG_PTR)CreateFuzzedSecurityDescriptor(structSlot, FuzzGetRemainingSlotSize(ParameterIndex)) : 0;
 
     case ParamTypeClientId:
-        return structSlot ? (ULONG_PTR)CreateFuzzedClientId(structSlot) : 0;
+        return structSlot ? (ULONG_PTR)CreateFuzzedClientId(structSlot, FuzzGetRemainingSlotSize(ParameterIndex)) : 0;
 
     case ParamTypeKeyValue:
         return (ULONG_PTR)CreateFuzzedKeyValueParameter();
@@ -1139,14 +1306,17 @@ ULONG_PTR FuzzGenerateParameter(
         ULONG bufferSize;
         PVOID buffer;
 
-        bufferSize = outPtrSizes[__rdtsc() % _countof(outPtrSizes)];
+        bufferSize = outPtrSizes[FuzzRandom() % _countof(outPtrSizes)];
         buffer = VirtualAlloc(NULL, bufferSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
 
         if (buffer) {
             RtlSecureZeroMemory(buffer, bufferSize);
-            FuzzTrackAllocation(buffer, AllocTypeVirtualAlloc);
+            if (!FuzzTrackAllocation(buffer, AllocTypeVirtualAlloc)) {
+                VirtualFree(buffer, 0, MEM_RELEASE);
+                return 0;
+            }
 
-            if (bufferSize <= sizeof(ULONG_PTR) && (__rdtsc() % 2) == 0) {
+            if (bufferSize <= sizeof(ULONG_PTR) && (FuzzRandom() % 2) == 0) {
                 *(PULONG_PTR)buffer = (ULONG_PTR)0xBADF00DCAFEBABEui64;
             }
 
@@ -1160,27 +1330,27 @@ ULONG_PTR FuzzGenerateParameter(
         if (ParameterIndex >= 2 && ParameterIndex <= 4 && variation < 5 && structSlot) {
             ULONG structType;
 
-            structType = (ULONG)(__rdtsc() % 3);
+            structType = FuzzRandom() % 3;
 
             switch (structType) {
             case 0:
-                return (ULONG_PTR)CreateFuzzedProcessTimes(structSlot);
+                return (ULONG_PTR)CreateFuzzedProcessTimes(structSlot, FuzzGetRemainingSlotSize(ParameterIndex));
             case 1:
-                return (ULONG_PTR)CreateFuzzedSectionImageInfo(structSlot);
+                return (ULONG_PTR)CreateFuzzedSectionImageInfo(structSlot, FuzzGetRemainingSlotSize(ParameterIndex));
             case 2:
-                return (ULONG_PTR)CreateFuzzedLargeInteger(structSlot);
+                return (ULONG_PTR)CreateFuzzedLargeInteger(structSlot, FuzzGetRemainingSlotSize(ParameterIndex));
             }
         }
 
         if (IsWin32kSyscall && variation < 10) {
-            if ((__rdtsc() % 2) == 0) {
-                return FuzzWin32Data[__rdtsc() % FUZZWIN32_COUNT];
+            if ((FuzzRandom() % 2) == 0) {
+                return FuzzWin32Data[FuzzRandom() % FUZZWIN32_COUNT];
             }
             else {
-                return FuzzGdiData[__rdtsc() % FUZZGDI_COUNT];
+                return FuzzGdiData[FuzzRandom() % FUZZGDI_COUNT];
             }
         }
-        return FuzzData[__rdtsc() % FUZZDATA_COUNT];
+        return FuzzData[FuzzRandom() % FUZZDATA_COUNT];
     }
 }
 
@@ -1224,57 +1394,64 @@ VOID FuzzDetectParameterTypes(
 *
 */
 PSECURITY_DESCRIPTOR CreateFuzzedSecurityDescriptor(
-    _In_ BYTE* FuzzStructBuffer
+    _In_ BYTE* FuzzStructBuffer,
+    _In_ SIZE_T BufferSize
 )
 {
+    DWORD dwAclSize;
+    ULONG mode;
+    BOOL bResult = FALSE;
     PSECURITY_DESCRIPTOR pSD;
     PACL pAcl = NULL;
-    DWORD dwAclSize;
-    ULONG mode = __rdtsc() % 8;
-    BOOL bResult = FALSE;
     SID_IDENTIFIER_AUTHORITY SIDAuthWorld = SECURITY_WORLD_SID_AUTHORITY;
     SID_IDENTIFIER_AUTHORITY SIDAuthNT = SECURITY_NT_AUTHORITY;
     PSID pEveryoneSid = NULL;
     PSID pSystemSid = NULL;
 
+    if (FuzzStructBuffer == NULL || BufferSize < SECURITY_DESCRIPTOR_MIN_LENGTH)
+        return NULL;
+
     pSD = (PSECURITY_DESCRIPTOR)FuzzStructBuffer;
+    mode = (ULONG)(FuzzRandom() % 8);
+
     RtlSecureZeroMemory(pSD, SECURITY_DESCRIPTOR_MIN_LENGTH);
 
     switch (mode) {
-    case 0: // NULL security descriptor
+    case 0:
         return NULL;
 
-    case 1: // Invalid security descriptor
-        return (PSECURITY_DESCRIPTOR)FuzzAddrData[__rdtsc() % FUZZADDR_COUNT];
+    case 1:
+        return (PSECURITY_DESCRIPTOR)FuzzAddrData[FuzzRandom() % FUZZADDR_COUNT];
 
-    case 2: // Empty but initialized security descriptor
+    case 2:
         if (!InitializeSecurityDescriptor(pSD, SECURITY_DESCRIPTOR_REVISION))
             return NULL;
         return pSD;
 
-    case 3: // Security descriptor with NULL DACL (everyone access)
+    case 3:
         if (!InitializeSecurityDescriptor(pSD, SECURITY_DESCRIPTOR_REVISION))
             return NULL;
 
         bResult = SetSecurityDescriptorDacl(pSD, TRUE, NULL, FALSE);
         return bResult ? pSD : NULL;
 
-    case 4: // Security descriptor with Deny-All DACL
+    case 4:
         if (!InitializeSecurityDescriptor(pSD, SECURITY_DESCRIPTOR_REVISION))
             return NULL;
 
-        // Create a PSID for Everyone
         if (!AllocateAndInitializeSid(&SIDAuthWorld, 1, SECURITY_WORLD_RID, 0, 0, 0, 0, 0, 0, 0, &pEveryoneSid))
             return NULL;
 
-        // Create a deny-all ACL
         dwAclSize = sizeof(ACL) + sizeof(ACCESS_DENIED_ACE) + GetLengthSid(pEveryoneSid);
         pAcl = (PACL)VirtualAlloc(NULL, dwAclSize, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
         if (pAcl) {
-            FuzzTrackAllocation(pAcl, AllocTypeVirtualAlloc);
+            if (!FuzzTrackAllocation(pAcl, AllocTypeVirtualAlloc)) {
+                VirtualFree(pAcl, 0, MEM_RELEASE);
+                FreeSid(pEveryoneSid);
+                return NULL;
+            }
 
             if (InitializeAcl(pAcl, dwAclSize, ACL_REVISION)) {
-                // Add a deny ACE for Everyone
                 if (AddAccessDeniedAce(pAcl, ACL_REVISION, GENERIC_ALL, pEveryoneSid)) {
                     if (SetSecurityDescriptorDacl(pSD, TRUE, pAcl, FALSE)) {
                         FreeSid(pEveryoneSid);
@@ -1286,35 +1463,37 @@ PSECURITY_DESCRIPTOR CreateFuzzedSecurityDescriptor(
         }
         return NULL;
 
-    case 5: // Security descriptor with owner but no DACL
+    case 5:
         if (!InitializeSecurityDescriptor(pSD, SECURITY_DESCRIPTOR_REVISION))
             return NULL;
 
-        // Create a PSID for Local System
         if (!AllocateAndInitializeSid(&SIDAuthNT, 1, SECURITY_LOCAL_SYSTEM_RID, 0, 0, 0, 0, 0, 0, 0, &pSystemSid))
             return NULL;
 
         if (SetSecurityDescriptorOwner(pSD, pSystemSid, FALSE)) {
-            // Keep SID alive for descriptor lifetime; cleanup is tracker-managed.
-            FuzzTrackAllocation(pSystemSid, AllocTypeSid);
+            if (!FuzzTrackAllocation(pSystemSid, AllocTypeSid)) {
+                FreeSid(pSystemSid);
+                return NULL;
+            }
             return pSD;
         }
+
         FreeSid(pSystemSid);
         return NULL;
 
-    case 6: // Invalid security descriptor with bad revision
-        if (!InitializeSecurityDescriptor(pSD, 0xFF)) // Bad revision number
+    case 6:
+        if (!InitializeSecurityDescriptor(pSD, 0xFF))
             return NULL;
         return pSD;
 
-    case 7: // Security descriptor with corrupted control bits
+    case 7:
         if (!InitializeSecurityDescriptor(pSD, SECURITY_DESCRIPTOR_REVISION))
             return NULL;
 
-        *(USHORT*)((PUCHAR)pSD + 2) = 0xFFFF; // Corrupt control bits
+        *(USHORT*)((PUCHAR)pSD + 2) = 0xFFFF;
         return pSD;
 
-    default: // Minimal valid security descriptor
+    default:
         if (!InitializeSecurityDescriptor(pSD, SECURITY_DESCRIPTOR_REVISION))
             return NULL;
 
@@ -1333,120 +1512,159 @@ PSECURITY_DESCRIPTOR CreateFuzzedSecurityDescriptor(
 *
 */
 PUNICODE_STRING CreateFuzzedUnicodeString(
-    _In_ BYTE* FuzzStructBuffer
+    _In_ BYTE* FuzzStructBuffer,
+    _In_ SIZE_T BufferSize
 )
 {
-    PUNICODE_STRING UnicodeString;
-    PWSTR buffer = NULL, stringBuf;
     USHORT length = 0, maxLength = 0;
-    ULONG mode = __rdtsc() % 16;
+    ULONG mode;
+    PUNICODE_STRING UnicodeString;
+    PWSTR buffer = NULL;
+    PWSTR stringBuf;
+    SIZE_T charsAvailable;
 
-    UnicodeString = (PUNICODE_STRING)FuzzStructBuffer;
-    RtlSecureZeroMemory(UnicodeString, sizeof(UNICODE_STRING));
-    stringBuf = (PWSTR)(FuzzStructBuffer + sizeof(UNICODE_STRING));
-
-    // Create different variants of UNICODE_STRING
-    switch (mode) {
-    case 0: // NULL structure
+    if (FuzzStructBuffer == NULL || BufferSize < sizeof(UNICODE_STRING))
         return NULL;
 
-    case 1: // Valid empty string
+    UnicodeString = (PUNICODE_STRING)FuzzStructBuffer;
+    mode = (ULONG)(FuzzRandom() % 16);
+
+    RtlSecureZeroMemory(UnicodeString, sizeof(UNICODE_STRING));
+    stringBuf = (PWSTR)(FuzzStructBuffer + sizeof(UNICODE_STRING));
+    charsAvailable = (BufferSize > sizeof(UNICODE_STRING)) ?
+        ((BufferSize - sizeof(UNICODE_STRING)) / sizeof(WCHAR)) : 0;
+
+    switch (mode) {
+    case 0:
+        return NULL;
+
+    case 1:
         length = 0;
         maxLength = 0;
         buffer = NULL;
         break;
 
-    case 2: // Valid string with content for file paths
-        _strcpy_w((PWSTR)stringBuf, L"\\??\\C:\\Windows\\System32\\kernel32.dll");
-        length = (USHORT)(_strlen_w((PWSTR)stringBuf) * sizeof(WCHAR));
+    case 2:
+        if (charsAvailable < RTL_NUMBER_OF(L"\\??\\C:\\Windows\\System32\\kernel32.dll"))
+            return NULL;
+
+        _strcpy_w(stringBuf, L"\\??\\C:\\Windows\\System32\\kernel32.dll");
+        length = (USHORT)(_strlen_w(stringBuf) * sizeof(WCHAR));
         maxLength = length + sizeof(WCHAR);
-        buffer = (PWSTR)stringBuf;
+        buffer = stringBuf;
         break;
 
-    case 3: // Valid string with registry path
-        _strcpy_w((PWSTR)stringBuf, L"\\Registry\\Machine\\Software\\Microsoft\\Windows NT\\CurrentVersion");
-        length = (USHORT)(_strlen_w((PWSTR)stringBuf) * sizeof(WCHAR));
+    case 3:
+        if (charsAvailable < RTL_NUMBER_OF(L"\\Registry\\Machine\\Software\\Microsoft\\Windows NT\\CurrentVersion"))
+            return NULL;
+
+        _strcpy_w(stringBuf, L"\\Registry\\Machine\\Software\\Microsoft\\Windows NT\\CurrentVersion");
+        length = (USHORT)(_strlen_w(stringBuf) * sizeof(WCHAR));
         maxLength = length + sizeof(WCHAR);
-        buffer = (PWSTR)stringBuf;
+        buffer = stringBuf;
         break;
 
-    case 4: // Invalid: Length > MaximumLength
-        _strcpy_w((PWSTR)stringBuf, L"BadString");
+    case 4:
+        if (charsAvailable < RTL_NUMBER_OF(L"BadString"))
+            return NULL;
+
+        _strcpy_w(stringBuf, L"BadString");
         length = 20;
         maxLength = 10;
-        buffer = (PWSTR)stringBuf;
+        buffer = stringBuf;
         break;
 
-    case 5: // Invalid: NULL buffer with non-zero length
+    case 5:
         length = 10;
         maxLength = 10;
         buffer = NULL;
         break;
 
-    case 6: // Invalid: Bad pointer
+    case 6:
         length = 10;
         maxLength = 10;
-        buffer = (PWSTR)FuzzAddrData[__rdtsc() % FUZZADDR_COUNT];
+        buffer = (PWSTR)FuzzAddrData[FuzzRandom() % FUZZADDR_COUNT];
         break;
 
-    case 7: // Odd lengths (unaligned)
-        _strcpy_w((PWSTR)stringBuf, L"OddString");
-        length = 7; // Intentionally wrong
+    case 7:
+        if (charsAvailable < RTL_NUMBER_OF(L"OddString"))
+            return NULL;
+
+        _strcpy_w(stringBuf, L"OddString");
+        length = 7;
         maxLength = 7;
-        buffer = (PWSTR)stringBuf;
+        buffer = stringBuf;
         break;
 
-    case 8: // Very long string (boundary testing)
+    case 8:
     {
-        PWCHAR p = (PWCHAR)stringBuf;
-        for (ULONG i = 0; i < 500; i++) {
-            *p++ = L'A' + (i % 26);
+        PWCHAR p;
+        ULONG i, maxChars;
+
+        if (charsAvailable < 2)
+            return NULL;
+
+        p = (PWCHAR)stringBuf;
+        maxChars = (ULONG)((charsAvailable - 1) < 500 ? (charsAvailable - 1) : 500);
+
+        for (i = 0; i < maxChars; i++) {
+            *p++ = (WCHAR)(L'A' + (i % 26));
         }
         *p = 0;
-        length = 1000;
-        maxLength = 1020;
-        buffer = (PWSTR)stringBuf;
+
+        length = (USHORT)(maxChars * sizeof(WCHAR));
+        maxLength = (USHORT)((maxChars + 1) * sizeof(WCHAR));
+        buffer = stringBuf;
     }
     break;
 
-    case 9: // String with special characters
-        _strcpy_w((PWSTR)stringBuf, L"%s%n%p\x0000\x0001\xFFFF\t\r\n");
-        length = (USHORT)(_strlen_w((PWSTR)stringBuf) * sizeof(WCHAR));
+    case 9:
+        if (charsAvailable < RTL_NUMBER_OF(L"%s%n%p\x0000\x0001\xFFFF\t\r\n"))
+            return NULL;
+
+        _strcpy_w(stringBuf, L"%s%n%p\x0000\x0001\xFFFF\t\r\n");
+        length = (USHORT)(_strlen_w(stringBuf) * sizeof(WCHAR));
         maxLength = length + sizeof(WCHAR);
-        buffer = (PWSTR)stringBuf;
+        buffer = stringBuf;
         break;
 
-    case 10: // String points to self
+    case 10:
         UnicodeString->Length = sizeof(UNICODE_STRING);
         UnicodeString->MaximumLength = sizeof(UNICODE_STRING);
         UnicodeString->Buffer = (PWSTR)UnicodeString;
-        break;
+        return UnicodeString;
 
-    case 11: // Buffer points inside parent
+    case 11:
         length = 6;
         maxLength = 8;
         buffer = (PWSTR)((BYTE*)UnicodeString - 4);
         break;
 
-    case 12: // Buffer is unaligned
+    case 12:
+        if (charsAvailable == 0)
+            return NULL;
+
         length = 8;
         maxLength = 16;
         buffer = (PWSTR)(((ULONG_PTR)stringBuf) | 1);
         break;
 
-    case 13: // Length/MaximumLength overflows
+    case 13:
         length = (USHORT)0xFFFF;
-        maxLength = (USHORT)0x0000; // wrap-around
+        maxLength = (USHORT)0x0000;
         buffer = stringBuf;
         break;
 
-    case 14: // All fields are 0xFF
+    case 14:
         memset(UnicodeString, 0xFF, sizeof(UNICODE_STRING));
         return UnicodeString;
 
-    case 15: // Length not multiple of WCHAR
+    case 15:
+        if (charsAvailable < RTL_NUMBER_OF(L"ABC"))
+            return NULL;
+
         _strcpy_w(stringBuf, L"ABC");
-        length = 3; // Not divisible by 2
+        length = 3;
         maxLength = 5;
         buffer = stringBuf;
         break;
@@ -1468,27 +1686,34 @@ PUNICODE_STRING CreateFuzzedUnicodeString(
 *
 */
 POBJECT_ATTRIBUTES CreateFuzzedObjectAttributes(
-    _In_ BYTE* FuzzStructBuffer
+    _In_ BYTE* FuzzStructBuffer,
+    _In_ SIZE_T BufferSize
 )
 {
+    ULONG mode;
+    SIZE_T remainSize;
     POBJECT_ATTRIBUTES ObjectAttributes;
     PUNICODE_STRING ObjectName;
     PBYTE stringBuffer;
-    ULONG mode = __rdtsc() % 8;
+
+    if (FuzzStructBuffer == NULL || BufferSize < sizeof(OBJECT_ATTRIBUTES))
+        return NULL;
+
+    mode = (ULONG)(FuzzRandom() % 8);
 
     ObjectAttributes = (POBJECT_ATTRIBUTES)FuzzStructBuffer;
     RtlSecureZeroMemory(ObjectAttributes, sizeof(OBJECT_ATTRIBUTES));
+
     stringBuffer = (PBYTE)FuzzStructBuffer + sizeof(OBJECT_ATTRIBUTES);
+    remainSize = BufferSize - sizeof(OBJECT_ATTRIBUTES);
 
-    // Create fuzzed object name
-    ObjectName = CreateFuzzedUnicodeString(stringBuffer);
+    ObjectName = CreateFuzzedUnicodeString(stringBuffer, remainSize);
 
-    // Create different variants
     switch (mode) {
-    case 0: // NULL structure
+    case 0:
         return NULL;
 
-    case 1: // Invalid length
+    case 1:
         ObjectAttributes->Length = sizeof(OBJECT_ATTRIBUTES) + 100;
         ObjectAttributes->RootDirectory = NULL;
         ObjectAttributes->ObjectName = ObjectName;
@@ -1497,38 +1722,39 @@ POBJECT_ATTRIBUTES CreateFuzzedObjectAttributes(
         ObjectAttributes->SecurityQualityOfService = NULL;
         break;
 
-    case 2: // Valid but with random attributes
+    case 2:
         ObjectAttributes->Length = sizeof(OBJECT_ATTRIBUTES);
         ObjectAttributes->RootDirectory = NULL;
         ObjectAttributes->ObjectName = ObjectName;
-        ObjectAttributes->Attributes = (ULONG)FuzzAttrData[__rdtsc() % FUZZATTR_COUNT];
+        ObjectAttributes->Attributes = (ULONG)FuzzAttrData[FuzzRandom() % FUZZATTR_COUNT];
         ObjectAttributes->SecurityDescriptor = NULL;
         ObjectAttributes->SecurityQualityOfService = NULL;
         break;
 
-    case 3: // Invalid security descriptor
+    case 3:
         ObjectAttributes->Length = sizeof(OBJECT_ATTRIBUTES);
         ObjectAttributes->RootDirectory = NULL;
         ObjectAttributes->ObjectName = ObjectName;
         ObjectAttributes->Attributes = 0;
-        ObjectAttributes->SecurityDescriptor = (PVOID)FuzzAddrData[__rdtsc() % FUZZADDR_COUNT];
+        ObjectAttributes->SecurityDescriptor = (PVOID)FuzzAddrData[FuzzRandom() % FUZZADDR_COUNT];
         ObjectAttributes->SecurityQualityOfService = NULL;
         break;
 
-    case 4: // All fields fuzzed
-        ObjectAttributes->Length = (__rdtsc() % 2 == 0) ? sizeof(OBJECT_ATTRIBUTES) : (__rdtsc() % 256);
-        ObjectAttributes->RootDirectory = (HANDLE)FuzzHandleData[__rdtsc() % FUZZHANDLE_COUNT];
+    case 4:
+        ObjectAttributes->Length = ((FuzzRandom() % 2) == 0) ?
+            sizeof(OBJECT_ATTRIBUTES) : (ULONG)(FuzzRandom() % 256);
+        ObjectAttributes->RootDirectory = (HANDLE)FuzzHandleData[FuzzRandom() % FUZZHANDLE_COUNT];
         ObjectAttributes->ObjectName = ObjectName;
-        ObjectAttributes->Attributes = (ULONG)FuzzAttrData[__rdtsc() % FUZZATTR_COUNT];
-        ObjectAttributes->SecurityDescriptor = (PVOID)FuzzAddrData[__rdtsc() % FUZZADDR_COUNT];
-        ObjectAttributes->SecurityQualityOfService = (PVOID)FuzzAddrData[__rdtsc() % FUZZADDR_COUNT];
+        ObjectAttributes->Attributes = (ULONG)FuzzAttrData[FuzzRandom() % FUZZATTR_COUNT];
+        ObjectAttributes->SecurityDescriptor = (PVOID)FuzzAddrData[FuzzRandom() % FUZZADDR_COUNT];
+        ObjectAttributes->SecurityQualityOfService = (PVOID)FuzzAddrData[FuzzRandom() % FUZZADDR_COUNT];
         break;
 
-    case 5: // All fields are 0xAA
+    case 5:
         memset(ObjectAttributes, 0xAA, sizeof(OBJECT_ATTRIBUTES));
         break;
 
-    case 6: // ObjectName points to ObjectAttributes itself
+    case 6:
         ObjectAttributes->Length = sizeof(OBJECT_ATTRIBUTES);
         ObjectAttributes->ObjectName = (PUNICODE_STRING)ObjectAttributes;
         ObjectAttributes->RootDirectory = NULL;
@@ -1537,7 +1763,7 @@ POBJECT_ATTRIBUTES CreateFuzzedObjectAttributes(
         ObjectAttributes->SecurityQualityOfService = NULL;
         break;
 
-    case 7: // ObjectName NULL, Length valid
+    case 7:
         ObjectAttributes->Length = sizeof(OBJECT_ATTRIBUTES);
         ObjectAttributes->ObjectName = NULL;
         ObjectAttributes->RootDirectory = NULL;
@@ -1559,22 +1785,27 @@ POBJECT_ATTRIBUTES CreateFuzzedObjectAttributes(
 *
 */
 PTOKEN_PRIVILEGES CreateFuzzedTokenPrivileges(
-    _In_ BYTE* FuzzStructBuffer
+    _In_ BYTE* FuzzStructBuffer,
+    _In_ SIZE_T BufferSize
 )
 {
+    ULONG i, variation, maxPrivileges, actualCount;
     PTOKEN_PRIVILEGES pPrivileges;
-    ULONG variation;
-    ULONG i, maxPrivileges, actualCount;
 
-    maxPrivileges = (FUZZ_PARAM_SLOT_SIZE - sizeof(ULONG)) / sizeof(LUID_AND_ATTRIBUTES);
+    if (FuzzStructBuffer == NULL || BufferSize < sizeof(ULONG))
+        return NULL;
 
-    variation = (ULONG)(__rdtsc() % 16);
+    maxPrivileges = (ULONG)((BufferSize - sizeof(ULONG)) / sizeof(LUID_AND_ATTRIBUTES));
+    variation = (ULONG)(FuzzRandom() % 16);
 
     pPrivileges = (PTOKEN_PRIVILEGES)FuzzStructBuffer;
-    RtlSecureZeroMemory(pPrivileges, FUZZ_PARAM_SLOT_SIZE);
+    RtlSecureZeroMemory(pPrivileges, BufferSize);
 
     switch (variation) {
     case 0:
+        if (maxPrivileges < 1)
+            return NULL;
+
         pPrivileges->PrivilegeCount = 1;
         pPrivileges->Privileges[0].Luid.LowPart = SE_DEBUG_PRIVILEGE;
         pPrivileges->Privileges[0].Luid.HighPart = 0;
@@ -1582,6 +1813,9 @@ PTOKEN_PRIVILEGES CreateFuzzedTokenPrivileges(
         break;
 
     case 1:
+        if (maxPrivileges < 3)
+            return NULL;
+
         actualCount = 3;
         pPrivileges->PrivilegeCount = actualCount;
         for (i = 0; i < actualCount; ++i) {
@@ -1597,15 +1831,18 @@ PTOKEN_PRIVILEGES CreateFuzzedTokenPrivileges(
 
     case 3:
         pPrivileges->PrivilegeCount = maxPrivileges + 1;
-        actualCount = (FUZZ_PARAM_SLOT_SIZE - sizeof(ULONG)) / sizeof(LUID_AND_ATTRIBUTES);
+        actualCount = maxPrivileges;
         for (i = 0; i < actualCount; ++i) {
-            pPrivileges->Privileges[i].Luid.LowPart = (ULONG)(__rdtsc() % 35);
+            pPrivileges->Privileges[i].Luid.LowPart = (ULONG)(FuzzRandom() % 35);
             pPrivileges->Privileges[i].Luid.HighPart = 0;
-            pPrivileges->Privileges[i].Attributes = ((__rdtsc() & 1) ? SE_PRIVILEGE_ENABLED : 0);
+            pPrivileges->Privileges[i].Attributes = ((FuzzRandom() & 1) ? SE_PRIVILEGE_ENABLED : 0);
         }
         break;
 
     case 4:
+        if (maxPrivileges < 1)
+            return NULL;
+
         pPrivileges->PrivilegeCount = 1;
         pPrivileges->Privileges[0].Luid.LowPart = SE_DEBUG_PRIVILEGE;
         pPrivileges->Privileges[0].Luid.HighPart = 0;
@@ -1613,6 +1850,9 @@ PTOKEN_PRIVILEGES CreateFuzzedTokenPrivileges(
         break;
 
     case 5:
+        if (maxPrivileges < 1)
+            return NULL;
+
         pPrivileges->PrivilegeCount = 1;
         pPrivileges->Privileges[0].Luid.LowPart = SE_DEBUG_PRIVILEGE;
         pPrivileges->Privileges[0].Luid.HighPart = 0;
@@ -1620,6 +1860,9 @@ PTOKEN_PRIVILEGES CreateFuzzedTokenPrivileges(
         break;
 
     case 6:
+        if (maxPrivileges < 1)
+            return NULL;
+
         pPrivileges->PrivilegeCount = 1;
         pPrivileges->Privileges[0].Luid.LowPart = SE_DEBUG_PRIVILEGE;
         pPrivileges->Privileges[0].Luid.HighPart = 0xFFFFFFFF;
@@ -1627,6 +1870,9 @@ PTOKEN_PRIVILEGES CreateFuzzedTokenPrivileges(
         break;
 
     case 7:
+        if (maxPrivileges < 1)
+            return NULL;
+
         pPrivileges->PrivilegeCount = 1;
         pPrivileges->Privileges[0].Luid.LowPart = 0xFFFF;
         pPrivileges->Privileges[0].Luid.HighPart = 0;
@@ -1640,8 +1886,11 @@ PTOKEN_PRIVILEGES CreateFuzzedTokenPrivileges(
         return (PTOKEN_PRIVILEGES)0x7FFFFFFFFFFFFFFF;
 
     default:
+        if (maxPrivileges < 1)
+            return NULL;
+
         pPrivileges->PrivilegeCount = 1;
-        pPrivileges->Privileges[0].Luid.LowPart = (ULONG)((__rdtsc() % 35) + 1);
+        pPrivileges->Privileges[0].Luid.LowPart = (ULONG)((FuzzRandom() % 35) + 1);
         pPrivileges->Privileges[0].Luid.HighPart = 0;
         pPrivileges->Privileges[0].Attributes = SE_PRIVILEGE_ENABLED;
         break;
@@ -1659,16 +1908,20 @@ PTOKEN_PRIVILEGES CreateFuzzedTokenPrivileges(
 *
 */
 PIO_STATUS_BLOCK CreateFuzzedIoStatusBlock(
-    _In_ BYTE* FuzzStructBuffer
+    _In_ BYTE* FuzzStructBuffer,
+    _In_ SIZE_T BufferSize
 )
 {
-    PIO_STATUS_BLOCK IoStatusBlock;
     ULONG variation;
+    PIO_STATUS_BLOCK IoStatusBlock;
+
+    if (FuzzStructBuffer == NULL || BufferSize < sizeof(IO_STATUS_BLOCK))
+        return NULL;
 
     IoStatusBlock = (PIO_STATUS_BLOCK)FuzzStructBuffer;
     RtlSecureZeroMemory(IoStatusBlock, sizeof(IO_STATUS_BLOCK));
 
-    variation = (ULONG)(__rdtsc() % 8);
+    variation = (ULONG)(FuzzRandom() % 8);
 
     switch (variation) {
     case 0:
@@ -1698,11 +1951,11 @@ PIO_STATUS_BLOCK CreateFuzzedIoStatusBlock(
         break;
 
     case 6:
-        return (PIO_STATUS_BLOCK)FuzzAddrData[__rdtsc() % FUZZADDR_COUNT];
+        return (PIO_STATUS_BLOCK)FuzzAddrData[FuzzRandom() % FUZZADDR_COUNT];
 
     case 7:
-        IoStatusBlock->Status = (NTSTATUS)FuzzStatusData[__rdtsc() % FUZZSTATUS_COUNT];
-        IoStatusBlock->Information = FuzzData[__rdtsc() % FUZZDATA_COUNT];
+        IoStatusBlock->Status = (NTSTATUS)FuzzStatusData[FuzzRandom() % FUZZSTATUS_COUNT];
+        IoStatusBlock->Information = FuzzData[FuzzRandom() % FUZZDATA_COUNT];
         break;
     }
 
@@ -1718,41 +1971,46 @@ PIO_STATUS_BLOCK CreateFuzzedIoStatusBlock(
 *
 */
 PCLIENT_ID CreateFuzzedClientId(
-    _In_ BYTE* FuzzStructBuffer
+    _In_ BYTE* FuzzStructBuffer,
+    _In_ SIZE_T BufferSize
 )
 {
+    ULONG variation;
     PCLIENT_ID ClientId;
-    ULONG variation = __rdtsc() % 6;
 
+    if (FuzzStructBuffer == NULL || BufferSize < sizeof(CLIENT_ID))
+        return NULL;
+
+    variation = (ULONG)(FuzzRandom() % 6);
     ClientId = (PCLIENT_ID)FuzzStructBuffer;
     RtlSecureZeroMemory(ClientId, sizeof(CLIENT_ID));
 
     switch (variation) {
-    case 0: // NULL client ID
+    case 0:
         return NULL;
 
-    case 1: // Current process/thread
+    case 1:
         ClientId->UniqueProcess = UlongToHandle(GetCurrentProcessId());
         ClientId->UniqueThread = UlongToHandle(GetCurrentThreadId());
         break;
 
-    case 2: // System process
-        ClientId->UniqueProcess = UlongToHandle(4); // System process ID
-        ClientId->UniqueThread = (HANDLE)FuzzHandleData[__rdtsc() % FUZZHANDLE_COUNT];
+    case 2:
+        ClientId->UniqueProcess = UlongToHandle(4);
+        ClientId->UniqueThread = (HANDLE)FuzzHandleData[FuzzRandom() % FUZZHANDLE_COUNT];
         break;
 
-    case 3: // Invalid process/valid thread
+    case 3:
         ClientId->UniqueProcess = UlongToHandle(0xFFFF);
         ClientId->UniqueThread = UlongToHandle(GetCurrentThreadId());
         break;
 
-    case 4: // Valid process/invalid thread
+    case 4:
         ClientId->UniqueProcess = UlongToHandle(GetCurrentProcessId());
         ClientId->UniqueThread = UlongToHandle(0xFFFFFFFF);
         break;
 
-    case 5: // Invalid pointer
-        return (PCLIENT_ID)FuzzAddrData[__rdtsc() % FUZZADDR_COUNT];
+    case 5:
+        return (PCLIENT_ID)FuzzAddrData[FuzzRandom() % FUZZADDR_COUNT];
     }
 
     return ClientId;
@@ -1767,51 +2025,56 @@ PCLIENT_ID CreateFuzzedClientId(
 *
 */
 PLARGE_INTEGER CreateFuzzedLargeInteger(
-    _In_ BYTE* FuzzStructBuffer
+    _In_ BYTE* FuzzStructBuffer,
+    _In_ SIZE_T BufferSize
 )
 {
+    ULONG variation;
     PLARGE_INTEGER LargeInteger;
-    ULONG variation = __rdtsc() % 7;
 
+    if (FuzzStructBuffer == NULL || BufferSize < sizeof(LARGE_INTEGER))
+        return NULL;
+
+    variation = (ULONG)(FuzzRandom() % 7);
     LargeInteger = (PLARGE_INTEGER)FuzzStructBuffer;
     RtlSecureZeroMemory(LargeInteger, sizeof(LARGE_INTEGER));
 
     switch (variation) {
-    case 0: // NULL large integer
+    case 0:
         return NULL;
 
-    case 1: // Zero
+    case 1:
         LargeInteger->QuadPart = 0;
         break;
 
-    case 2: // Small positive value
-        LargeInteger->QuadPart = __rdtsc() % 1000;
+    case 2:
+        LargeInteger->QuadPart = FuzzRandom() % 1000;
         break;
 
-    case 3: // Large positive value
+    case 3:
         LargeInteger->QuadPart = 0x7FFFFFFFFFFFFFFF;
         break;
 
-    case 4: // Negative value
+    case 4:
         LargeInteger->QuadPart = -10000;
         break;
 
-    case 5: // Invalid pointer
-        return (PLARGE_INTEGER)FuzzAddrData[__rdtsc() % FUZZADDR_COUNT];
+    case 5:
+        return (PLARGE_INTEGER)FuzzAddrData[FuzzRandom() % FUZZADDR_COUNT];
 
-    case 6: // Special time values
+    case 6:
     {
-        // Array of special time values in 100ns units
         static const LONGLONG specialTimes[] = {
-            0,                      // Zero time
-            10000000,               // 1 second
-            36000000000,            // 1 hour
-            864000000000,           // 1 day
-            -10000000,              // -1 second (relative time)
-            0x7FFFFFFFFFFFFFFF,     // Max positive value
-            0x8000000000000000      // Min negative value
+            0,
+            10000000,
+            36000000000,
+            864000000000,
+            -10000000,
+            0x7FFFFFFFFFFFFFFF,
+            0x8000000000000000
         };
-        LargeInteger->QuadPart = specialTimes[__rdtsc() % 7];
+
+        LargeInteger->QuadPart = specialTimes[FuzzRandom() % RTL_NUMBER_OF(specialTimes)];
     }
     break;
     }
@@ -1828,24 +2091,27 @@ PLARGE_INTEGER CreateFuzzedLargeInteger(
 *
 */
 PKERNEL_USER_TIMES CreateFuzzedProcessTimes(
-    _In_ BYTE* FuzzStructBuffer
+    _In_ BYTE* FuzzStructBuffer,
+    _In_ SIZE_T BufferSize
 )
 {
-    PKERNEL_USER_TIMES Times;
     ULONG variation;
+    PKERNEL_USER_TIMES Times;
     LARGE_INTEGER currentTime;
+
+    if (FuzzStructBuffer == NULL || BufferSize < sizeof(KERNEL_USER_TIMES))
+        return NULL;
 
     Times = (PKERNEL_USER_TIMES)FuzzStructBuffer;
     RtlZeroMemory(Times, sizeof(KERNEL_USER_TIMES));
-
-    variation = (ULONG)(__rdtsc() % 5);
+    variation = (ULONG)(FuzzRandom() % 5);
 
     switch (variation) {
     case 0:
         return NULL;
 
     case 1:
-        return (PKERNEL_USER_TIMES)FuzzAddrData[__rdtsc() % FUZZADDR_COUNT];
+        return (PKERNEL_USER_TIMES)FuzzAddrData[FuzzRandom() % FUZZADDR_COUNT];
 
     case 2:
         break;
@@ -1879,24 +2145,28 @@ PKERNEL_USER_TIMES CreateFuzzedProcessTimes(
 *
 */
 PSECTION_IMAGE_INFORMATION CreateFuzzedSectionImageInfo(
-    _In_ BYTE* FuzzStructBuffer
+    _In_ BYTE* FuzzStructBuffer,
+    _In_ SIZE_T BufferSize
 )
 {
+    ULONG variation;
     PSECTION_IMAGE_INFORMATION SectionInfo;
-    ULONG variation = __rdtsc() % 4;
 
+    if (FuzzStructBuffer == NULL || BufferSize < sizeof(SECTION_IMAGE_INFORMATION))
+        return NULL;
+
+    variation = (ULONG)(FuzzRandom() % 4);
     SectionInfo = (PSECTION_IMAGE_INFORMATION)FuzzStructBuffer;
     RtlZeroMemory(SectionInfo, sizeof(SECTION_IMAGE_INFORMATION));
 
     switch (variation) {
-    case 0: // NULL
+    case 0:
         return NULL;
 
-    case 1: // All zeros
-        // Already zeroed
+    case 1:
         break;
 
-    case 2: // Realistic PE values
+    case 2:
         SectionInfo->TransferAddress = (PVOID)0x400000;
         SectionInfo->ZeroBits = 0;
         SectionInfo->MaximumStackSize = 0x100000;
@@ -1913,7 +2183,7 @@ PSECTION_IMAGE_INFORMATION CreateFuzzedSectionImageInfo(
         SectionInfo->CheckSum = 0x12345;
         break;
 
-    case 3: // Invalid values
+    case 3:
         SectionInfo->TransferAddress = (PVOID)0xFFFFFFFFFFFFFFFF;
         SectionInfo->ZeroBits = 0xFF;
         SectionInfo->MaximumStackSize = 0xFFFFFFFF;
@@ -1942,164 +2212,163 @@ PSECTION_IMAGE_INFORMATION CreateFuzzedSectionImageInfo(
 * Create a fuzzed registry value structure
 *
 */
-PVOID CreateFuzzedKeyValueParameter(VOID)
+PVOID CreateFuzzedKeyValueParameter(
+    VOID
+)
 {
-    BYTE* buf = (BYTE*)VirtualAlloc(NULL, MAX_KEYVALUE_BUFFER_SIZE, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
+    BYTE* buf;
+    ULONG variation, keyType;
+
+    variation = (ULONG)FuzzRandom();
+    keyType = variation % 10;
+
+    if (keyType == 9) {
+        return (PVOID)FuzzAddrData[FuzzRandom() % FUZZADDR_COUNT];
+    }
+
+    buf = (BYTE*)VirtualAlloc(NULL, MAX_KEYVALUE_BUFFER_SIZE, MEM_COMMIT | MEM_RESERVE, PAGE_READWRITE);
     if (!buf)
         return NULL;
 
-    FuzzTrackAllocation(buf, AllocTypeVirtualAlloc);
+    if (!FuzzTrackAllocation(buf, AllocTypeVirtualAlloc)) {
+        VirtualFree(buf, 0, MEM_RELEASE);
+        return NULL;
+    }
 
     RtlZeroMemory(buf, MAX_KEYVALUE_BUFFER_SIZE);
 
-    ULONG variation = (ULONG)__rdtsc();
-    ULONG keyType = variation % 10;
-
     switch (keyType) {
     case 0: {
-        //
-        // KEY_VALUE_BASIC_INFORMATION - normal, buffer-safe
-        //
-        PKEY_VALUE_BASIC_INFORMATION info = (PKEY_VALUE_BASIC_INFORMATION)buf;
-        ULONG maxNameLen = (MAX_KEYVALUE_BUFFER_SIZE - sizeof(*info) + sizeof(WCHAR)) / sizeof(WCHAR);
-        ULONG nameLen = (variation >> 4) % (maxNameLen + 1);
+        PKEY_VALUE_BASIC_INFORMATION info;
+        ULONG maxNameLen;
+        ULONG nameLen;
+        ULONG i;
+
+        info = (PKEY_VALUE_BASIC_INFORMATION)buf;
+        maxNameLen = (MAX_KEYVALUE_BUFFER_SIZE - sizeof(*info) + sizeof(WCHAR)) / sizeof(WCHAR);
+        nameLen = (variation >> 4) % (maxNameLen + 1);
         info->TitleIndex = (variation >> 8) & 0xFF;
         info->Type = (variation >> 16) & 0xF;
         info->NameLength = nameLen * sizeof(WCHAR);
-        if (sizeof(*info) - sizeof(WCHAR) + info->NameLength > MAX_KEYVALUE_BUFFER_SIZE)
-            info->NameLength = (MAX_KEYVALUE_BUFFER_SIZE - (sizeof(*info) - sizeof(WCHAR))) & ~1UL;
-        for (ULONG i = 0; i < info->NameLength / sizeof(WCHAR); ++i)
+        for (i = 0; i < info->NameLength / sizeof(WCHAR); ++i)
             info->Name[i] = (WCHAR)(L'A' + (variation + i) % 26);
         break;
     }
     case 1: {
-        //
-        // KEY_VALUE_FULL_INFORMATION - normal, buffer-safe
-        //
-        PKEY_VALUE_FULL_INFORMATION info = (PKEY_VALUE_FULL_INFORMATION)buf;
-        ULONG maxNameLen = (MAX_KEYVALUE_BUFFER_SIZE - sizeof(*info) + sizeof(WCHAR)) / sizeof(WCHAR);
-        ULONG nameLen = (variation >> 5) % (maxNameLen + 1);
-        info->NameLength = nameLen * sizeof(WCHAR);
-        if (sizeof(*info) - sizeof(WCHAR) + info->NameLength > MAX_KEYVALUE_BUFFER_SIZE)
-            info->NameLength = (MAX_KEYVALUE_BUFFER_SIZE - (sizeof(*info) - sizeof(WCHAR))) & ~1UL;
+        PKEY_VALUE_FULL_INFORMATION info;
+        ULONG maxNameLen;
+        ULONG nameLen;
+        ULONG dataOffset;
+        ULONG maxDataLen;
+        ULONG dataLen;
+        BYTE* data;
+        ULONG i;
 
-        ULONG dataOffset = sizeof(*info) - sizeof(WCHAR) + info->NameLength;
-        ULONG maxDataLen = (dataOffset < MAX_KEYVALUE_BUFFER_SIZE)
-            ? (MAX_KEYVALUE_BUFFER_SIZE - dataOffset)
-            : 0;
-        ULONG dataLen = (variation >> 9) % (maxDataLen + 1);
+        info = (PKEY_VALUE_FULL_INFORMATION)buf;
+        maxNameLen = (MAX_KEYVALUE_BUFFER_SIZE - sizeof(*info) + sizeof(WCHAR)) / sizeof(WCHAR);
+        nameLen = (variation >> 5) % (maxNameLen + 1);
+        info->NameLength = nameLen * sizeof(WCHAR);
+        dataOffset = sizeof(*info) - sizeof(WCHAR) + info->NameLength;
+        maxDataLen = (dataOffset < MAX_KEYVALUE_BUFFER_SIZE) ?
+            (MAX_KEYVALUE_BUFFER_SIZE - dataOffset) : 0;
+        dataLen = (variation >> 9) % (maxDataLen + 1);
 
         info->TitleIndex = (variation >> 12) & 0xFF;
         info->Type = (variation >> 20) & 0xF;
         info->DataLength = dataLen;
         info->DataOffset = dataOffset;
 
-        for (ULONG i = 0; i < info->NameLength / sizeof(WCHAR); ++i)
+        for (i = 0; i < info->NameLength / sizeof(WCHAR); ++i)
             info->Name[i] = (WCHAR)(L'B' + (variation + i) % 26);
 
-        BYTE* data = buf + info->DataOffset;
-        for (ULONG i = 0; i < dataLen && (info->DataOffset + i) < MAX_KEYVALUE_BUFFER_SIZE; ++i)
+        data = buf + info->DataOffset;
+        for (i = 0; i < dataLen && (info->DataOffset + i) < MAX_KEYVALUE_BUFFER_SIZE; ++i)
             data[i] = (BYTE)((variation >> (i % 16)) & 0xFF);
         break;
     }
     case 2: {
-        //
-        // KEY_VALUE_PARTIAL_INFORMATION - normal, buffer-safe
-        //
-        PKEY_VALUE_PARTIAL_INFORMATION info = (PKEY_VALUE_PARTIAL_INFORMATION)buf;
-        ULONG maxDataLen = (MAX_KEYVALUE_BUFFER_SIZE > sizeof(*info))
-            ? (MAX_KEYVALUE_BUFFER_SIZE - sizeof(*info) + 1)
-            : 0;
-        ULONG dataLen = (variation >> 4) % (maxDataLen + 1);
-        if (sizeof(*info) - 1 + dataLen > MAX_KEYVALUE_BUFFER_SIZE)
-            dataLen = MAX_KEYVALUE_BUFFER_SIZE - (sizeof(*info) - 1);
+        PKEY_VALUE_PARTIAL_INFORMATION info;
+        ULONG maxDataLen;
+        ULONG dataLen;
+        ULONG i;
+
+        info = (PKEY_VALUE_PARTIAL_INFORMATION)buf;
+        maxDataLen = (MAX_KEYVALUE_BUFFER_SIZE > sizeof(*info)) ?
+            (MAX_KEYVALUE_BUFFER_SIZE - sizeof(*info) + 1) : 0;
+        dataLen = (variation >> 4) % (maxDataLen + 1);
         info->TitleIndex = (variation >> 1) & 0xFF;
         info->Type = (variation >> 10) & 0xF;
         info->DataLength = dataLen;
-        for (ULONG i = 0; i < dataLen; ++i)
+        for (i = 0; i < dataLen; ++i)
             info->Data[i] = (UCHAR)((variation + i) & 0xFF);
         break;
     }
     case 3: {
-        //
-        // KEY_VALUE_PARTIAL_INFORMATION_ALIGN64 - normal, buffer-safe
-        //
-        PKEY_VALUE_PARTIAL_INFORMATION_ALIGN64 info = (PKEY_VALUE_PARTIAL_INFORMATION_ALIGN64)buf;
-        ULONG maxDataLen = (MAX_KEYVALUE_BUFFER_SIZE > sizeof(*info))
-            ? (MAX_KEYVALUE_BUFFER_SIZE - sizeof(*info) + 1)
-            : 0;
-        ULONG dataLen = (variation >> 2) % (maxDataLen + 1);
-        if (sizeof(*info) - 1 + dataLen > MAX_KEYVALUE_BUFFER_SIZE)
-            dataLen = MAX_KEYVALUE_BUFFER_SIZE - (sizeof(*info) - 1);
+        PKEY_VALUE_PARTIAL_INFORMATION_ALIGN64 info;
+        ULONG maxDataLen;
+        ULONG dataLen;
+        ULONG i;
+
+        info = (PKEY_VALUE_PARTIAL_INFORMATION_ALIGN64)buf;
+        maxDataLen = (MAX_KEYVALUE_BUFFER_SIZE > sizeof(*info)) ?
+            (MAX_KEYVALUE_BUFFER_SIZE - sizeof(*info) + 1) : 0;
+        dataLen = (variation >> 2) % (maxDataLen + 1);
         info->Type = (variation >> 6) & 0xF;
         info->DataLength = dataLen;
-        for (ULONG i = 0; i < dataLen; ++i)
+        for (i = 0; i < dataLen; ++i)
             info->Data[i] = (UCHAR)(((variation >> (i % 8)) ^ 0xAA) & 0xFF);
         break;
     }
     case 4: {
-        //
-        // KEY_VALUE_FULL_INFORMATION - edge/invalid metadata values
-        //
-        PKEY_VALUE_FULL_INFORMATION info = (PKEY_VALUE_FULL_INFORMATION)buf;
+        PKEY_VALUE_FULL_INFORMATION info;
+
+        info = (PKEY_VALUE_FULL_INFORMATION)buf;
         info->TitleIndex = 0xFFFFFFFF;
         info->Type = 0xDEADBEEF;
         info->NameLength = 0x10000;
         info->DataLength = 0x10000;
         info->DataOffset = 0xFFFFFFF0;
-        // Name/Data purposely uninitialized for edge testing
         break;
     }
     case 5: {
-        //
-        // KEY_VALUE_BASIC_INFORMATION - edge/invalid metadata values (NameLength, etc.)
-        //
-        PKEY_VALUE_BASIC_INFORMATION info = (PKEY_VALUE_BASIC_INFORMATION)buf;
+        PKEY_VALUE_BASIC_INFORMATION info;
+
+        info = (PKEY_VALUE_BASIC_INFORMATION)buf;
         info->TitleIndex = 0xFFFFFFFF;
         info->Type = 0x1BADB002;
         info->NameLength = 0xFFFFFFFC;
-        // Name purposely uninitialized for edge testing
         break;
     }
     case 6: {
-        //
-        // KEY_VALUE_PARTIAL_INFORMATION - edge/invalid DataLength
-        //
-        PKEY_VALUE_PARTIAL_INFORMATION info = (PKEY_VALUE_PARTIAL_INFORMATION)buf;
+        PKEY_VALUE_PARTIAL_INFORMATION info;
+
+        info = (PKEY_VALUE_PARTIAL_INFORMATION)buf;
         info->TitleIndex = 0xFFFFFFFF;
         info->Type = 0xABCD1234;
         info->DataLength = 0xFFFFFFFF;
-        // Data purposely uninitialized
         break;
     }
     case 7: {
-        //
-        // KEY_VALUE_PARTIAL_INFORMATION_ALIGN64 - edge/invalid DataLength
-        //
-        PKEY_VALUE_PARTIAL_INFORMATION_ALIGN64 info = (PKEY_VALUE_PARTIAL_INFORMATION_ALIGN64)buf;
+        PKEY_VALUE_PARTIAL_INFORMATION_ALIGN64 info;
+
+        info = (PKEY_VALUE_PARTIAL_INFORMATION_ALIGN64)buf;
         info->Type = 0xF00DFACE;
         info->DataLength = 0xFFFFFFFF;
-        // Data purposely uninitialized
         break;
     }
     case 8: {
-        //
-        // KEY_VALUE_FULL_INFORMATION - conflicting/overlapping metadata
-        //
-        PKEY_VALUE_FULL_INFORMATION info = (PKEY_VALUE_FULL_INFORMATION)buf;
+        PKEY_VALUE_FULL_INFORMATION info;
+
+        info = (PKEY_VALUE_FULL_INFORMATION)buf;
         info->TitleIndex = 0x0;
         info->Type = 0x0;
         info->NameLength = 0x80000000;
         info->DataLength = 0x80000000;
         info->DataOffset = 0x10;
-        // Name/Data purposely uninitialized
         break;
     }
     default:
-        //
-        // Return random fuzz data
-        //
-        return (PVOID)FuzzAddrData[__rdtsc() % FUZZADDR_COUNT];
+        break;
     }
 
     return buf;

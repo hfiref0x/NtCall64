@@ -1,13 +1,13 @@
 /************************************************************************************
 *
-*  (C) COPYRIGHT AUTHORS, 2015 - 2025
+*  (C) COPYRIGHT AUTHORS, 2015 - 2026
 *  Translated from Microsoft sources/debugger or mentioned elsewhere.
 *
 *  TITLE:       NTOS.H
 *
-*  VERSION:     1.240
+*  VERSION:     1.252
 *
-*  DATE:        02 Dec 2025
+*  DATE:        12 Aug 2026
 *
 *  Common header file for the ntos API functions and definitions.
 *
@@ -93,6 +93,14 @@ extern "C" {
 
 #ifndef POI //poi-poi
 #define POI(addr) *(ULONG *)(addr)
+#endif
+
+#ifndef MAX
+#define MAX(a,b) (((a) > (b)) ? (a) : (b))
+#endif
+
+#ifndef MIN
+#define MIN(a,b) (((a) < (b)) ? (a) : (b))
 #endif
 
 typedef char CCHAR;
@@ -254,7 +262,10 @@ char _RTL_CONSTANT_STRING_type_check(const void *s);
 //
 // Valid values for the OBJECT_ATTRIBUTES.Attributes field
 //
+#define OBJ_PROTECT_CLOSE                   0x00000001L
 #define OBJ_INHERIT                         0x00000002L
+#define OBJ_AUDIT_OBJECT_CLOSE              0x00000004L
+#define OBJ_NO_RIGHTS_UPGRADE               0x00000008L
 #define OBJ_PERMANENT                       0x00000010L
 #define OBJ_EXCLUSIVE                       0x00000020L
 #define OBJ_CASE_INSENSITIVE                0x00000040L
@@ -265,9 +276,6 @@ char _RTL_CONSTANT_STRING_type_check(const void *s);
 #define OBJ_IGNORE_IMPERSONATED_DEVICEMAP   0x00000800L
 #define OBJ_DONT_REPARSE                    0x00001000L
 #define OBJ_VALID_ATTRIBUTES                0x00001FF2L
-
-#define OBJ_PROTECT_CLOSE                   0x00000001L
-#define OBJ_AUDIT_OBJECT_CLOSE              0x00000004L
 
 //
 // Callback Object Rights
@@ -408,7 +416,7 @@ char _RTL_CONSTANT_STRING_type_check(const void *s);
 #define SYMBOLIC_LINK_QUERY 0x0001
 #define SYMBOLIC_LINK_SET   0x0002
 #define SYMBOLIC_LINK_ALL_ACCESS (STANDARD_RIGHTS_REQUIRED | SYMBOLIC_LINK_QUERY)
-#define SYMBOLIC_LINK_ALL_ACCESS_EX (STANDARD_RIGHTS_REQUIRED | 0xFFFF)
+#define SYMBOLIC_LINK_ALL_ACCESS_EX (STANDARD_RIGHTS_REQUIRED | SPECIFIC_RIGHTS_ALL)
 
 //
 // Thread Object Access Rights
@@ -503,6 +511,11 @@ char _RTL_CONSTANT_STRING_type_check(const void *s);
 #ifndef MAX_USTRING
 #define MAX_USTRING ( sizeof(WCHAR) * (MAXUSHORT/sizeof(WCHAR)) )
 #endif
+
+#ifndef __PCSID_DEFINED__
+#define __PCSID_DEFINED__
+typedef const SID* PCSID;
+#endif /* __PCSID_DEFINED__ */
 
 typedef struct _EX_RUNDOWN_REF {
     union
@@ -746,8 +759,46 @@ typedef struct _VM_COUNTERS {
     SIZE_T QuotaNonPagedPoolUsage;
     SIZE_T PagefileUsage;
     SIZE_T PeakPagefileUsage;
-    SIZE_T PrivatePageCount;
-} VM_COUNTERS;
+} VM_COUNTERS, *PVM_COUNTERS;
+
+typedef struct _VM_COUNTERS_EX {
+    SIZE_T PeakVirtualSize;             
+    SIZE_T VirtualSize;                 
+    ULONG PageFaultCount;               
+    SIZE_T PeakWorkingSetSize;          
+    SIZE_T WorkingSetSize;              
+    SIZE_T QuotaPeakPagedPoolUsage;     
+    SIZE_T QuotaPagedPoolUsage;         
+    SIZE_T QuotaPeakNonPagedPoolUsage;  
+    SIZE_T QuotaNonPagedPoolUsage;      
+    SIZE_T PagefileUsage;               
+    SIZE_T PeakPagefileUsage;           
+    SIZE_T PrivateUsage;                
+} VM_COUNTERS_EX, * PVM_COUNTERS_EX;
+
+typedef struct _VM_COUNTERS_EX2 {
+    union
+    {
+        VM_COUNTERS_EX CountersEx;
+        struct
+        {
+            SIZE_T PeakVirtualSize;             
+            SIZE_T VirtualSize;                 
+            ULONG PageFaultCount;               
+            SIZE_T PeakWorkingSetSize;          
+            SIZE_T WorkingSetSize;              
+            SIZE_T QuotaPeakPagedPoolUsage;     
+            SIZE_T QuotaPagedPoolUsage;         
+            SIZE_T QuotaPeakNonPagedPoolUsage;  
+            SIZE_T QuotaNonPagedPoolUsage;      
+            SIZE_T PagefileUsage;               
+            SIZE_T PeakPagefileUsage;           
+            SIZE_T PrivateUsage;                
+        };
+    };
+    SIZE_T PrivateWorkingSetSize;               
+    SIZE_T SharedCommitUsage;                   
+} VM_COUNTERS_EX2, * PVM_COUNTERS_EX2;
 
 typedef struct _SYSTEM_THREAD_INFORMATION {
     LARGE_INTEGER KernelTime;
@@ -791,8 +842,24 @@ typedef struct _SYSTEM_PROCESS_INFORMATION {
     ULONG HandleCount;
     ULONG SessionId;
     ULONG_PTR UniqueProcessKey;
-    VM_COUNTERS VmCounters;
-    IO_COUNTERS IoCounters;
+    SIZE_T PeakVirtualSize;                    
+    SIZE_T VirtualSize;                        
+    ULONG PageFaultCount;                      
+    SIZE_T PeakWorkingSetSize;                 
+    SIZE_T WorkingSetSize;                     
+    SIZE_T QuotaPeakPagedPoolUsage;            
+    SIZE_T QuotaPagedPoolUsage;                
+    SIZE_T QuotaPeakNonPagedPoolUsage;         
+    SIZE_T QuotaNonPagedPoolUsage;             
+    SIZE_T PagefileUsage;                      
+    SIZE_T PeakPagefileUsage;                  
+    SIZE_T PrivatePageCount;                   
+    LARGE_INTEGER ReadOperationCount;          
+    LARGE_INTEGER WriteOperationCount;         
+    LARGE_INTEGER OtherOperationCount;         
+    LARGE_INTEGER ReadTransferCount;           
+    LARGE_INTEGER WriteTransferCount;          
+    LARGE_INTEGER OtherTransferCount;           
     SYSTEM_THREAD_INFORMATION Threads[1]; //not a part of this structure
 } SYSTEM_PROCESS_INFORMATION, *PSYSTEM_PROCESS_INFORMATION;
 
@@ -914,6 +981,91 @@ typedef struct _SYSTEM_BASIC_INFORMATION {
     CCHAR NumberOfProcessors;
 } SYSTEM_BASIC_INFORMATION, *PSYSTEM_BASIC_INFORMATION;
 
+typedef struct _SYSTEM_PERFORMANCE_INFORMATION {
+    LARGE_INTEGER IdleProcessTime;
+    LARGE_INTEGER IoReadTransferCount;
+    LARGE_INTEGER IoWriteTransferCount;
+    LARGE_INTEGER IoOtherTransferCount;
+    ULONG IoReadOperationCount;
+    ULONG IoWriteOperationCount;
+    ULONG IoOtherOperationCount;
+    ULONG AvailablePages;
+    ULONG CommittedPages;
+    ULONG CommitLimit;
+    ULONG PeakCommitment;
+    ULONG PageFaultCount;
+    ULONG CopyOnWriteCount;
+    ULONG TransitionCount;
+    ULONG CacheTransitionCount;
+    ULONG DemandZeroCount;
+    ULONG PageReadCount;
+    ULONG PageReadIoCount;
+    ULONG CacheReadCount;
+    ULONG CacheIoCount;
+    ULONG DirtyPagesWriteCount;
+    ULONG DirtyWriteIoCount;
+    ULONG MappedPagesWriteCount;
+    ULONG MappedWriteIoCount;
+    ULONG PagedPoolPages;
+    ULONG NonPagedPoolPages;
+    ULONG PagedPoolAllocs;
+    ULONG PagedPoolFrees;
+    ULONG NonPagedPoolAllocs;
+    ULONG NonPagedPoolFrees;
+    ULONG FreeSystemPtes;
+    ULONG ResidentSystemCodePage;
+    ULONG TotalSystemDriverPages;
+    ULONG TotalSystemCodePages;
+    ULONG NonPagedPoolLookasideHits;
+    ULONG PagedPoolLookasideHits;
+    ULONG AvailablePagedPoolPages;
+    ULONG ResidentSystemCachePage;
+    ULONG ResidentPagedPoolPage;
+    ULONG ResidentSystemDriverPage;
+    ULONG CcFastReadNoWait;
+    ULONG CcFastReadWait;
+    ULONG CcFastReadResourceMiss;
+    ULONG CcFastReadNotPossible;
+    ULONG CcFastMdlReadNoWait;
+    ULONG CcFastMdlReadWait;
+    ULONG CcFastMdlReadResourceMiss;
+    ULONG CcFastMdlReadNotPossible;
+    ULONG CcMapDataNoWait;
+    ULONG CcMapDataWait;
+    ULONG CcMapDataNoWaitMiss;
+    ULONG CcMapDataWaitMiss;
+    ULONG CcPinMappedDataCount;
+    ULONG CcPinReadNoWait;
+    ULONG CcPinReadWait;
+    ULONG CcPinReadNoWaitMiss;
+    ULONG CcPinReadWaitMiss;
+    ULONG CcCopyReadNoWait;
+    ULONG CcCopyReadWait;
+    ULONG CcCopyReadNoWaitMiss;
+    ULONG CcCopyReadWaitMiss;
+    ULONG CcMdlReadNoWait;
+    ULONG CcMdlReadWait;
+    ULONG CcMdlReadNoWaitMiss;
+    ULONG CcMdlReadWaitMiss;
+    ULONG CcReadAheadIos;
+    ULONG CcLazyWriteIos;
+    ULONG CcLazyWritePages;
+    ULONG CcDataFlushes;
+    ULONG CcDataPages;
+    ULONG ContextSwitches;
+    ULONG FirstLevelTbFills;
+    ULONG SecondLevelTbFills;
+    ULONG SystemCalls;
+    ULONGLONG CcTotalDirtyPages;
+    ULONGLONG CcDirtyPageThreshold;
+    LONGLONG ResidentAvailablePages;
+    ULONGLONG SharedCommittedPages;
+    ULONGLONG MdlPagesAllocated;
+    ULONGLONG PfnDatabaseCommittedPages;
+    ULONGLONG SystemPageTableCommittedPages;
+    ULONGLONG ContiguousPagesAllocated;
+} SYSTEM_PERFORMANCE_INFORMATION, * PSYSTEM_PERFORMANCE_INFORMATION;
+
 typedef struct _SYSTEM_ISOLATED_USER_MODE_INFORMATION {
     BOOLEAN SecureKernelRunning : 1;
     BOOLEAN HvciEnabled : 1;
@@ -930,7 +1082,8 @@ typedef struct _SYSTEM_ISOLATED_USER_MODE_INFORMATION {
     BOOLEAN HardwareEnforcedHvpt : 1;
     BOOLEAN HardwareHvptAvailable : 1;
     BOOLEAN SpareFlags2 : 1;
-    BOOLEAN Spare0[6];
+    BOOLEAN EncryptionKeyTpmBound : 1;
+    BOOLEAN Spare0[5];
     ULONGLONG Spare1;
 } SYSTEM_ISOLATED_USER_MODE_INFORMATION, *PSYSTEM_ISOLATED_USER_MODE_INFORMATION;
 
@@ -1006,6 +1159,25 @@ typedef struct _SYSTEM_BIGPOOL_INFORMATION {
 typedef struct _SYSTEM_FIRMWARE_PARTITION_INFORMATION {
     UNICODE_STRING FirmwarePartition; // \Device\HarddiskX
 } SYSTEM_FIRMWARE_PARTITION_INFORMATION, * PSYSTEM_FIRMWARE_PARTITION_INFORMATION;
+
+typedef struct _SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION {
+    LARGE_INTEGER IdleTime;
+    LARGE_INTEGER KernelTime;
+    LARGE_INTEGER UserTime;
+    LARGE_INTEGER DpcTime;
+    LARGE_INTEGER InterruptTime;
+    ULONG InterruptCount;
+    ULONG Spare0;
+} SYSTEM_PROCESSOR_PERFORMANCE_INFORMATION, * PSYSTEM_PROCESSOR_PERFORMANCE_INFORMATION;
+
+_Struct_size_bytes_(NextEntryOffset)
+typedef struct _SYSTEM_PAGEFILE_INFORMATION {
+    ULONG NextEntryOffset;
+    ULONG TotalSize;
+    ULONG TotalInUse;
+    ULONG PeakUsage;
+    UNICODE_STRING PageFileName;
+} SYSTEM_PAGEFILE_INFORMATION, * PSYSTEM_PAGEFILE_INFORMATION;
 
 typedef struct _RTL_PROCESS_BACKTRACE_INFORMATION {
     PCHAR SymbolicBackTrace;
@@ -1279,6 +1451,23 @@ typedef struct _PROCESS_HANDLE_TABLE_ENTRY_INFO {
     ULONG HandleAttributes;
     ULONG Reserved;
 } PROCESS_HANDLE_TABLE_ENTRY_INFO, *PPROCESS_HANDLE_TABLE_ENTRY_INFO;
+
+typedef struct _HANDLE_TABLE_ENTRY {
+    union {
+        VOID* Object;                    // Pointer to the object (e.g., _EPROCESS)
+        ULONG_PTR ObAttributes;          // Low bits contain object flags/attributes
+        ULONGLONG Value;                 // Whole 64-bit value representing the object info
+    };
+    union {
+        ULONG GrantedAccess;             // access mask
+        struct {
+            USHORT GrantedAccessBits : 16;
+            USHORT NoCPUCount : 1;
+            USHORT CheckedTransfer : 1;
+        };
+        LONG NextFreeHandleEntry;        // Used if the handle slot is closed/free
+    };
+} HANDLE_TABLE_ENTRY, * PHANDLE_TABLE_ENTRY;
 
 typedef struct _PROCESS_HANDLE_SNAPSHOT_INFORMATION {
     ULONG_PTR NumberOfHandles;
@@ -1922,7 +2111,7 @@ typedef enum _SYSTEM_INFORMATION_CLASS {
     SystemMemoryNumaInformation = 239,
     SystemMemoryNumaPerformanceInformation = 240,
     SystemCodeIntegritySignedPoliciesFullInformation = 241,
-    SystemSecureSecretsInformation = 242,
+    SystemSecureCoreInformation = 242,
     SystemTrustedAppsRuntimeInformation = 243,
     SystemBadPageInformationEx = 244,
     SystemResourceDeadlockTimeout = 245,
@@ -1934,6 +2123,9 @@ typedef enum _SYSTEM_INFORMATION_CLASS {
     SystemRefTraceInformationEx = 251,
     SystemBasicProcessInformation = 252,
     SystemHandleCountInformation = 253,
+    SystemRuntimeAttestationReport = 254,
+    SystemPoolTagInformation2 = 255,
+    SystemCodeIntegrityEndpointSecurityInformation = 256,
     MaxSystemInfoClass
 } SYSTEM_INFORMATION_CLASS, * PSYSTEM_INFORMATION_CLASS;
 
@@ -2069,6 +2261,11 @@ typedef struct _SYSTEM_CODEINTEGRITY_INFORMATION {
     ULONG  CodeIntegrityOptions;
 } SYSTEM_CODEINTEGRITY_INFORMATION, *PSYSTEM_CODEINTEGRITY_INFORMATION;
 
+typedef struct _SYSTEM_CODE_INTEGRITY_POLICIES_FULL_INFORMATION {
+    ULONG PolicyCount;
+    UCHAR PolicyBlobs[ANYSIZE_ARRAY];
+} SYSTEM_CODE_INTEGRITY_POLICIES_FULL_INFORMATION, * PSYSTEM_CODE_INTEGRITY_POLICIES_FULL_INFORMATION;
+
 #define CODEINTEGRITY_OPTION_ENABLED                      0x01
 #define CODEINTEGRITY_OPTION_TESTSIGN                     0x02
 #define CODEINTEGRITY_OPTION_UMCI_ENABLED                 0x04
@@ -2085,6 +2282,12 @@ typedef struct _SYSTEM_CODEINTEGRITY_INFORMATION {
 #define CODEINTEGRITY_OPTION_HVCI_IUM_ENABLED             0x2000
 #define CODEINTEGRITY_OPTION_WHQL_ENFORCEMENT_ENABLED     0x4000
 #define CODEINTEGRITY_OPTION_WHQL_AUDITMODE_ENABLED       0x8000
+
+typedef struct _SYSTEM_SECURE_CORE_INFORMATION {
+    BOOLEAN IsSecureCore;
+    ULONGLONG SecureKernelRunning;
+    ULONGLONG VslFeatures;
+} SYSTEM_SECURE_CORE_INFORMATION, * PSYSTEM_SECURE_CORE_INFORMATION;
 
 typedef struct _HV_DETAILS {
     ULONG Data[4];
@@ -4290,92 +4493,102 @@ enum _KOBJECTS {
 #define FILE_CHARACTERISTIC_CSV                     0x00010000
 #define FILE_DEVICE_ALLOW_APPCONTAINER_TRAVERSAL    0x00020000
 #define FILE_PORTABLE_DEVICE                        0x00040000
+#define FILE_REMOTE_DEVICE_VSMB                     0x00080000
+#define FILE_DEVICE_REQUIRE_SECURITY_CHECK          0x00100000
 
-#define FILE_DEVICE_BEEP                0x00000001
-#define FILE_DEVICE_CD_ROM              0x00000002
-#define FILE_DEVICE_CD_ROM_FILE_SYSTEM  0x00000003
-#define FILE_DEVICE_CONTROLLER          0x00000004
-#define FILE_DEVICE_DATALINK            0x00000005
-#define FILE_DEVICE_DFS                 0x00000006
-#define FILE_DEVICE_DISK                0x00000007
-#define FILE_DEVICE_DISK_FILE_SYSTEM    0x00000008
-#define FILE_DEVICE_FILE_SYSTEM         0x00000009
-#define FILE_DEVICE_INPORT_PORT         0x0000000a
-#define FILE_DEVICE_KEYBOARD            0x0000000b
-#define FILE_DEVICE_MAILSLOT            0x0000000c
-#define FILE_DEVICE_MIDI_IN             0x0000000d
-#define FILE_DEVICE_MIDI_OUT            0x0000000e
-#define FILE_DEVICE_MOUSE               0x0000000f
-#define FILE_DEVICE_MULTI_UNC_PROVIDER  0x00000010
-#define FILE_DEVICE_NAMED_PIPE          0x00000011
-#define FILE_DEVICE_NETWORK             0x00000012
-#define FILE_DEVICE_NETWORK_BROWSER     0x00000013
-#define FILE_DEVICE_NETWORK_FILE_SYSTEM 0x00000014
-#define FILE_DEVICE_NULL                0x00000015
-#define FILE_DEVICE_PARALLEL_PORT       0x00000016
-#define FILE_DEVICE_PHYSICAL_NETCARD    0x00000017
-#define FILE_DEVICE_PRINTER             0x00000018
-#define FILE_DEVICE_SCANNER             0x00000019
-#define FILE_DEVICE_SERIAL_MOUSE_PORT   0x0000001a
-#define FILE_DEVICE_SERIAL_PORT         0x0000001b
-#define FILE_DEVICE_SCREEN              0x0000001c
-#define FILE_DEVICE_SOUND               0x0000001d
-#define FILE_DEVICE_STREAMS             0x0000001e
-#define FILE_DEVICE_TAPE                0x0000001f
-#define FILE_DEVICE_TAPE_FILE_SYSTEM    0x00000020
-#define FILE_DEVICE_TRANSPORT           0x00000021
-#define FILE_DEVICE_UNKNOWN             0x00000022
-#define FILE_DEVICE_VIDEO               0x00000023
-#define FILE_DEVICE_VIRTUAL_DISK        0x00000024
-#define FILE_DEVICE_WAVE_IN             0x00000025
-#define FILE_DEVICE_WAVE_OUT            0x00000026
-#define FILE_DEVICE_8042_PORT           0x00000027
-#define FILE_DEVICE_NETWORK_REDIRECTOR  0x00000028
-#define FILE_DEVICE_BATTERY             0x00000029
-#define FILE_DEVICE_BUS_EXTENDER        0x0000002a
-#define FILE_DEVICE_MODEM               0x0000002b
-#define FILE_DEVICE_VDM                 0x0000002c
-#define FILE_DEVICE_MASS_STORAGE        0x0000002d
-#define FILE_DEVICE_SMB                 0x0000002e
-#define FILE_DEVICE_KS                  0x0000002f
-#define FILE_DEVICE_CHANGER             0x00000030
-#define FILE_DEVICE_SMARTCARD           0x00000031
-#define FILE_DEVICE_ACPI                0x00000032
-#define FILE_DEVICE_DVD                 0x00000033
-#define FILE_DEVICE_FULLSCREEN_VIDEO    0x00000034
-#define FILE_DEVICE_DFS_FILE_SYSTEM     0x00000035
-#define FILE_DEVICE_DFS_VOLUME          0x00000036
-#define FILE_DEVICE_SERENUM             0x00000037
-#define FILE_DEVICE_TERMSRV             0x00000038
-#define FILE_DEVICE_KSEC                0x00000039
-#define FILE_DEVICE_FIPS                0x0000003A
-#define FILE_DEVICE_INFINIBAND          0x0000003B
-#define FILE_DEVICE_VMBUS               0x0000003E
-#define FILE_DEVICE_CRYPT_PROVIDER      0x0000003F
-#define FILE_DEVICE_WPD                 0x00000040
-#define FILE_DEVICE_BLUETOOTH           0x00000041
-#define FILE_DEVICE_MT_COMPOSITE        0x00000042
-#define FILE_DEVICE_MT_TRANSPORT        0x00000043
-#define FILE_DEVICE_BIOMETRIC           0x00000044
-#define FILE_DEVICE_PMI                 0x00000045
-#define FILE_DEVICE_EHSTOR              0x00000046
-#define FILE_DEVICE_DEVAPI              0x00000047
-#define FILE_DEVICE_GPIO                0x00000048
-#define FILE_DEVICE_USBEX               0x00000049
-#define FILE_DEVICE_CONSOLE             0x00000050
-#define FILE_DEVICE_NFP                 0x00000051
-#define FILE_DEVICE_SYSENV              0x00000052
-#define FILE_DEVICE_VIRTUAL_BLOCK       0x00000053
-#define FILE_DEVICE_POINT_OF_SERVICE    0x00000054
-#define FILE_DEVICE_STORAGE_REPLICATION 0x00000055
-#define FILE_DEVICE_TRUST_ENV           0x00000056
-#define FILE_DEVICE_UCM                 0x00000057
-#define FILE_DEVICE_UCMTCPCI            0x00000058
-#define FILE_DEVICE_PERSISTENT_MEMORY   0x00000059
-#define FILE_DEVICE_NVDIMM              0x0000005a
-#define FILE_DEVICE_HOLOGRAPHIC         0x0000005b
-#define FILE_DEVICE_SDFXHCI             0x0000005c
-#define FILE_DEVICE_UCMUCSI             0x0000005d
+#define FILE_DEVICE_BEEP                    0x00000001
+#define FILE_DEVICE_CD_ROM                  0x00000002
+#define FILE_DEVICE_CD_ROM_FILE_SYSTEM      0x00000003
+#define FILE_DEVICE_CONTROLLER              0x00000004
+#define FILE_DEVICE_DATALINK                0x00000005
+#define FILE_DEVICE_DFS                     0x00000006
+#define FILE_DEVICE_DISK                    0x00000007
+#define FILE_DEVICE_DISK_FILE_SYSTEM        0x00000008
+#define FILE_DEVICE_FILE_SYSTEM             0x00000009
+#define FILE_DEVICE_INPORT_PORT             0x0000000a
+#define FILE_DEVICE_KEYBOARD                0x0000000b
+#define FILE_DEVICE_MAILSLOT                0x0000000c
+#define FILE_DEVICE_MIDI_IN                 0x0000000d
+#define FILE_DEVICE_MIDI_OUT                0x0000000e
+#define FILE_DEVICE_MOUSE                   0x0000000f
+#define FILE_DEVICE_MULTI_UNC_PROVIDER      0x00000010
+#define FILE_DEVICE_NAMED_PIPE              0x00000011
+#define FILE_DEVICE_NETWORK                 0x00000012
+#define FILE_DEVICE_NETWORK_BROWSER         0x00000013
+#define FILE_DEVICE_NETWORK_FILE_SYSTEM     0x00000014
+#define FILE_DEVICE_NULL                    0x00000015
+#define FILE_DEVICE_PARALLEL_PORT           0x00000016
+#define FILE_DEVICE_PHYSICAL_NETCARD        0x00000017
+#define FILE_DEVICE_PRINTER                 0x00000018
+#define FILE_DEVICE_SCANNER                 0x00000019
+#define FILE_DEVICE_SERIAL_MOUSE_PORT       0x0000001a
+#define FILE_DEVICE_SERIAL_PORT             0x0000001b
+#define FILE_DEVICE_SCREEN                  0x0000001c
+#define FILE_DEVICE_SOUND                   0x0000001d
+#define FILE_DEVICE_STREAMS                 0x0000001e
+#define FILE_DEVICE_TAPE                    0x0000001f
+#define FILE_DEVICE_TAPE_FILE_SYSTEM        0x00000020
+#define FILE_DEVICE_TRANSPORT               0x00000021
+#define FILE_DEVICE_UNKNOWN                 0x00000022
+#define FILE_DEVICE_VIDEO                   0x00000023
+#define FILE_DEVICE_VIRTUAL_DISK            0x00000024
+#define FILE_DEVICE_WAVE_IN                 0x00000025
+#define FILE_DEVICE_WAVE_OUT                0x00000026
+#define FILE_DEVICE_8042_PORT               0x00000027
+#define FILE_DEVICE_NETWORK_REDIRECTOR      0x00000028
+#define FILE_DEVICE_BATTERY                 0x00000029
+#define FILE_DEVICE_BUS_EXTENDER            0x0000002a
+#define FILE_DEVICE_MODEM                   0x0000002b
+#define FILE_DEVICE_VDM                     0x0000002c
+#define FILE_DEVICE_MASS_STORAGE            0x0000002d
+#define FILE_DEVICE_SMB                     0x0000002e
+#define FILE_DEVICE_KS                      0x0000002f
+#define FILE_DEVICE_CHANGER                 0x00000030
+#define FILE_DEVICE_SMARTCARD               0x00000031
+#define FILE_DEVICE_ACPI                    0x00000032
+#define FILE_DEVICE_DVD                     0x00000033
+#define FILE_DEVICE_FULLSCREEN_VIDEO        0x00000034
+#define FILE_DEVICE_DFS_FILE_SYSTEM         0x00000035
+#define FILE_DEVICE_DFS_VOLUME              0x00000036
+#define FILE_DEVICE_SERENUM                 0x00000037
+#define FILE_DEVICE_TERMSRV                 0x00000038
+#define FILE_DEVICE_KSEC                    0x00000039
+#define FILE_DEVICE_FIPS                    0x0000003A
+#define FILE_DEVICE_INFINIBAND              0x0000003B
+#define FILE_DEVICE_VMBUS                   0x0000003E
+#define FILE_DEVICE_CRYPT_PROVIDER          0x0000003F
+#define FILE_DEVICE_WPD                     0x00000040
+#define FILE_DEVICE_BLUETOOTH               0x00000041
+#define FILE_DEVICE_MT_COMPOSITE            0x00000042
+#define FILE_DEVICE_MT_TRANSPORT            0x00000043
+#define FILE_DEVICE_BIOMETRIC               0x00000044
+#define FILE_DEVICE_PMI                     0x00000045
+#define FILE_DEVICE_EHSTOR                  0x00000046
+#define FILE_DEVICE_DEVAPI                  0x00000047
+#define FILE_DEVICE_GPIO                    0x00000048
+#define FILE_DEVICE_USBEX                   0x00000049
+#define FILE_DEVICE_CONSOLE                 0x00000050
+#define FILE_DEVICE_NFP                     0x00000051
+#define FILE_DEVICE_SYSENV                  0x00000052
+#define FILE_DEVICE_VIRTUAL_BLOCK           0x00000053
+#define FILE_DEVICE_POINT_OF_SERVICE        0x00000054
+#define FILE_DEVICE_STORAGE_REPLICATION     0x00000055
+#define FILE_DEVICE_TRUST_ENV               0x00000056
+#define FILE_DEVICE_UCM                     0x00000057
+#define FILE_DEVICE_UCMTCPCI                0x00000058
+#define FILE_DEVICE_PERSISTENT_MEMORY       0x00000059
+#define FILE_DEVICE_NVDIMM                  0x0000005a
+#define FILE_DEVICE_HOLOGRAPHIC             0x0000005b
+#define FILE_DEVICE_SDFXHCI                 0x0000005c
+#define FILE_DEVICE_UCMUCSI                 0x0000005d
+#define FILE_DEVICE_PRM                     0x0000005e
+#define FILE_DEVICE_EVENT_COLLECTOR         0x0000005f
+#define FILE_DEVICE_USB4                    0x00000060
+#define FILE_DEVICE_SOUNDWIRE               0x00000061
+#define FILE_DEVICE_FABRIC_NVME             0x00000062
+#define FILE_DEVICE_SVM                     0x00000063
+#define FILE_DEVICE_HARDWARE_ACCELERATOR    0x00000064
+#define FILE_DEVICE_I3C                     0x00000065
 
 #define FILE_BYTE_ALIGNMENT             0x00000000
 #define FILE_WORD_ALIGNMENT             0x00000001
@@ -5735,6 +5948,7 @@ typedef enum _MEMORY_INFORMATION_CLASS {
     MemoryPhysicalContiguityInformation,
     MemoryBadInformation,
     MemoryBadInformationAllProcesses,
+    MemoryImageExtensionInformation,
     MaxMemoryInfoClass
 } MEMORY_INFORMATION_CLASS, *PMEMORY_INFORMATION_CLASS;
 
@@ -5912,6 +6126,19 @@ typedef struct _MEMORY_WORKING_SET_EX_INFORMATION {
         ULONG_PTR Long;
     } u1;
 } MEMORY_WORKING_SET_EX_INFORMATION, * PMEMORY_WORKING_SET_EX_INFORMATION;
+
+typedef enum _MEMORY_IMAGE_EXTENSION_TYPE {
+    MemoryImageExtensionCfgScp,
+    MemoryImageExtensionCfgEmulatedScp,
+    MemoryImageExtensionTypeMax,
+} MEMORY_IMAGE_EXTENSION_TYPE;
+
+typedef struct _MEMORY_IMAGE_EXTENSION_INFORMATION {
+    MEMORY_IMAGE_EXTENSION_TYPE ExtensionType;
+    ULONG Flags;
+    PVOID ExtensionImageBaseRva;
+    SIZE_T ExtensionSize;
+} MEMORY_IMAGE_EXTENSION_INFORMATION, * PMEMORY_IMAGE_EXTENSION_INFORMATION;
 
 #define MM_ZERO_ACCESS         0  // this value is not used.
 #define MM_READONLY            1
@@ -7195,7 +7422,7 @@ typedef enum _ALTERNATIVE_ARCHITECTURE_TYPE {
 #define MM_SHARED_USER_DATA_VA      0x000000007FFE0000
 
 //
-// WARNING: this definition is OS version dependent.
+// WARNING: this definition is OS version/CPU architecture type dependent.
 // Structure maybe incomplete.
 //
 #include <pshpack4.h>
@@ -7345,8 +7572,19 @@ typedef struct _KUSER_SHARED_DATA {
     union {
         USHORT QpcData;
         struct {
-            UCHAR QpcBypassEnabled : 1;
-            UCHAR QpcShift : 1;
+            union {
+                volatile UCHAR QpcBypassEnabled;
+                struct {
+                    volatile UCHAR BypassAllowed : 1;
+                    volatile UCHAR HypervisorAssist : 1;
+                    volatile UCHAR Reserved_2_3 : 2;
+                    volatile UCHAR UseMfence : 1;
+                    volatile UCHAR UseLfence : 1;
+                    volatile UCHAR Reserved_6 : 1;
+                    volatile UCHAR UseRdtscp : 1;
+                };
+            };
+            UCHAR QpcReserved;
         };
     };
 
@@ -7806,6 +8044,9 @@ typedef struct _PF_PHYSICAL_MEMORY_RANGE {
     ULONG_PTR PageCount;
 } PF_PHYSICAL_MEMORY_RANGE, * PPF_PHYSICAL_MEMORY_RANGE;
 
+#pragma warning(push)
+#pragma warning(disable: 4324)
+
 typedef struct __declspec(align(8)) _PF_MEMORY_RANGE_INFO_V1 {
     ULONG Version;
     ULONG RangeCount;
@@ -7819,6 +8060,8 @@ typedef struct __declspec(align(8))  _PF_MEMORY_RANGE_INFO_V2 {
     ULONG RangeCount;
     PF_PHYSICAL_MEMORY_RANGE Ranges[ANYSIZE_ARRAY];
 } PF_MEMORY_RANGE_INFO_V2, * PPF_MEMORY_RANGE_INFO_V2;
+
+#pragma warning(pop)
 
 typedef struct _PF_MEMORY_RANGE_V2 {
     ULONG_PTR BasePfn;
@@ -10576,6 +10819,8 @@ RtlWow64SetThreadContext(
 *
 ************************************************************************************/
 
+#define RtlProcessHeap() (NtCurrentPeb()->ProcessHeap)
+
 typedef NTSTATUS(NTAPI * PRTL_HEAP_COMMIT_ROUTINE)(
     _In_  PVOID Base,
     _Inout_ PVOID *CommitAddress,
@@ -10699,6 +10944,33 @@ NTAPI
 RtlEnumProcessHeaps(
     _In_ PRTL_ENUM_HEAPS_ROUTINE EnumRoutine,
     _In_ PVOID Parameter);
+
+NTSYSAPI
+BOOLEAN
+NTAPI
+RtlValidateHeap(
+    _In_opt_ HANDLE HeapHandle,
+    _In_ ULONG Flags,
+    _In_opt_ PVOID BaseAddress);
+
+NTSYSAPI
+SIZE_T
+NTAPI
+RtlCompactHeap(
+    _In_ HANDLE HeapHandle,
+    _In_ ULONG Flags);
+
+NTSYSAPI
+BOOLEAN
+NTAPI
+RtlLockHeap(
+    _In_ HANDLE HeapHandle);
+
+NTSYSAPI
+BOOLEAN
+NTAPI
+RtlUnlockHeap(
+    _In_ HANDLE HeapHandle);
 
 /************************************************************************************
 *
@@ -11008,6 +11280,132 @@ RtlCaptureStackBackTrace(
     _In_ ULONG FramesToCapture,
     _Out_writes_to_(FramesToCapture, return) PVOID* BackTrace,
     _Out_opt_ PULONG BackTraceHash);
+
+typedef struct _RTL_PROCESS_MODULES* PRTL_PROCESS_MODULES;
+typedef struct _RTL_PROCESS_MODULE_INFORMATION_EX* PRTL_PROCESS_MODULE_INFORMATION_EX;
+typedef struct _RTL_PROCESS_BACKTRACES* PRTL_PROCESS_BACKTRACES;
+typedef struct _RTL_PROCESS_LOCKS* PRTL_PROCESS_LOCKS;
+
+typedef struct _RTL_PROCESS_VERIFIER_OPTIONS {
+    ULONG SizeStruct;
+    ULONG Option;
+    UCHAR OptionData[1];
+} RTL_PROCESS_VERIFIER_OPTIONS, * PRTL_PROCESS_VERIFIER_OPTIONS;
+
+typedef struct _RTL_DEBUG_INFORMATION {
+    HANDLE SectionHandleClient;
+    PVOID ViewBaseClient;
+    PVOID ViewBaseTarget;
+    ULONG_PTR ViewBaseDelta;
+    HANDLE EventPairClient;
+    HANDLE EventPairTarget;
+    HANDLE TargetProcessId;
+    HANDLE TargetThreadHandle;
+    ULONG Flags;
+    SIZE_T OffsetFree;
+    SIZE_T CommitSize;
+    SIZE_T ViewSize;
+    union
+    {
+        PRTL_PROCESS_MODULES Modules;
+        PRTL_PROCESS_MODULE_INFORMATION_EX ModulesEx;
+    };
+    PRTL_PROCESS_BACKTRACES BackTraces;
+    PVOID Heaps;
+    PRTL_PROCESS_LOCKS Locks;
+    PVOID SpecificHeap;
+    HANDLE TargetProcessHandle;
+    PRTL_PROCESS_VERIFIER_OPTIONS VerifierOptions;
+    PVOID ProcessHeap;
+    HANDLE CriticalSectionHandle;
+    HANDLE CriticalSectionOwnerThread;
+    PVOID Reserved[4];
+} RTL_DEBUG_INFORMATION, * PRTL_DEBUG_INFORMATION;
+
+NTSYSAPI
+PRTL_DEBUG_INFORMATION
+NTAPI
+RtlCreateQueryDebugBuffer(
+    _In_opt_ ULONG MaximumCommit,
+    _In_ BOOLEAN UseEventPair);
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+RtlDestroyQueryDebugBuffer(
+    _In_ PRTL_DEBUG_INFORMATION Buffer);
+
+#define RTL_QUERY_PROCESS_MODULES 0x00000001
+#define RTL_QUERY_PROCESS_BACKTRACES 0x00000002
+#define RTL_QUERY_PROCESS_HEAP_SUMMARY 0x00000004 
+#define RTL_QUERY_PROCESS_HEAP_TAGS 0x00000008
+#define RTL_QUERY_PROCESS_HEAP_ENTRIES 0x00000010 
+#define RTL_QUERY_PROCESS_LOCKS 0x00000020
+#define RTL_QUERY_PROCESS_MODULES32 0x00000040 
+#define RTL_QUERY_PROCESS_VERIFIER_OPTIONS 0x00000080 
+#define RTL_QUERY_PROCESS_MODULESEX 0x00000100 
+#define RTL_QUERY_PROCESS_HEAP_SEGMENTS 0x00000200 
+#define RTL_QUERY_PROCESS_CS_OWNER 0x00000400 
+#define RTL_QUERY_PROCESS_USE_CURRENT_PROCESS 0x40000000 
+#define RTL_QUERY_PROCESS_NONINVASIVE 0x80000000 
+#define RTL_QUERY_PROCESS_NONINVASIVE_CS_OWNER 0x80000800 
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+RtlQueryProcessDebugInformation(
+    _In_ HANDLE UniqueProcessId,
+    _In_ ULONG Flags,
+    _Inout_ PRTL_DEBUG_INFORMATION Buffer);
+
+// Windows 7/8/10
+typedef struct _RTL_HEAP_INFORMATION_V1 {
+    PVOID BaseAddress;
+    ULONG Flags;
+    USHORT EntryOverhead;
+    USHORT CreatorBackTraceIndex;
+    SIZE_T BytesAllocated;
+    SIZE_T BytesCommitted;
+    ULONG NumberOfTags;
+    ULONG NumberOfEntries;
+    ULONG NumberOfPseudoTags;
+    ULONG PseudoTagGranularity;
+    ULONG Reserved[5];
+    PVOID Tags;
+    PVOID Entries;
+} RTL_HEAP_INFORMATION_V1, * PRTL_HEAP_INFORMATION_V1;
+
+// Windows 11 > 22000
+typedef struct _RTL_HEAP_INFORMATION_V2 {
+    PVOID BaseAddress;
+    ULONG Flags;
+    USHORT EntryOverhead;
+    USHORT CreatorBackTraceIndex;
+    SIZE_T BytesAllocated;
+    SIZE_T BytesCommitted;
+    ULONG NumberOfTags;
+    ULONG NumberOfEntries;
+    ULONG NumberOfPseudoTags;
+    ULONG PseudoTagGranularity;
+    ULONG Reserved[5];
+    PVOID Tags;
+    PVOID Entries;
+    ULONG64 HeapTag;
+} RTL_HEAP_INFORMATION_V2, * PRTL_HEAP_INFORMATION_V2;
+
+#define RTL_HEAP_SIGNATURE 0xFFEEFFEEUL
+#define RTL_HEAP_SEGMENT_SIGNATURE 0xDDEEDDEEUL
+
+typedef struct _RTL_PROCESS_HEAPS_V1 {
+    ULONG NumberOfHeaps;
+    _Field_size_(NumberOfHeaps) RTL_HEAP_INFORMATION_V1 Heaps[1];
+} RTL_PROCESS_HEAPS_V1, * PRTL_PROCESS_HEAPS_V1;
+
+typedef struct _RTL_PROCESS_HEAPS_V2 {
+    ULONG NumberOfHeaps;
+    _Field_size_(NumberOfHeaps) RTL_HEAP_INFORMATION_V2 Heaps[1];
+} RTL_PROCESS_HEAPS_V2, * PRTL_PROCESS_HEAPS_V2;
+
 
 /************************************************************************************
 *
@@ -11422,6 +11820,123 @@ RtlSetIoCompletionCallback(
 
 /************************************************************************************
 *
+* RTL WNF (Windows Notification Facility support.
+*
+************************************************************************************/
+
+#define WNF_STATE_KEY 0x41C64E6DA3BC0074
+
+typedef ULONG WNF_CHANGE_STAMP, * PWNF_CHANGE_STAMP;
+
+typedef enum _WNF_STATE_NAME_INFORMATION {
+    WnfInfoStateNameExist,
+    WnfInfoSubscribersPresent,
+    WnfInfoIsQuiescent
+} WNF_STATE_NAME_INFORMATION;
+
+typedef struct _WNF_STATE_NAME {
+    union
+    {
+        ULONGLONG Value;
+        ULONG Data[2];
+        struct
+        {
+            ULONG64 Version : 4;
+            ULONG64 NameLifetime : 2;
+            ULONG64 DataScope : 4;
+            ULONG64 PermanentData : 1;
+            ULONG64 Unique : 53;
+        };
+    };
+} WNF_STATE_NAME, * PWNF_STATE_NAME;
+typedef const WNF_STATE_NAME* PCWNF_STATE_NAME;
+
+typedef enum _WNF_STATE_NAME_LIFETIME {
+    WnfWellKnownStateName,
+    WnfPermanentStateName,
+    WnfPersistentStateName,
+    WnfTemporaryStateName
+} WNF_STATE_NAME_LIFETIME;
+
+typedef enum _WNF_DATA_SCOPE {
+    WnfDataScopeSystem,
+    WnfDataScopeSession,
+    WnfDataScopeUser,
+    WnfDataScopeProcess,
+    WnfDataScopeMachine,
+    WnfDataScopePhysicalMachine,
+} WNF_DATA_SCOPE;
+
+typedef struct _WNF_TYPE_ID {
+    GUID TypeId;
+} WNF_TYPE_ID, * PWNF_TYPE_ID;
+typedef const WNF_TYPE_ID* PCWNF_TYPE_ID;
+
+_Must_inspect_result_
+NTSYSAPI
+BOOLEAN
+NTAPI
+RtlEqualWnfChangeStamps(
+    _In_ WNF_CHANGE_STAMP ChangeStamp1,
+    _In_ WNF_CHANGE_STAMP ChangeStamp2);
+
+_Always_(_Post_satisfies_(return == STATUS_NO_MEMORY || return == STATUS_RETRY || return == STATUS_SUCCESS))
+typedef _Function_class_(WNF_USER_CALLBACK)
+NTSTATUS NTAPI WNF_USER_CALLBACK(
+    _In_ WNF_STATE_NAME StateName,
+    _In_ WNF_CHANGE_STAMP ChangeStamp,
+    _In_opt_ PWNF_TYPE_ID TypeId,
+    _In_opt_ PVOID CallbackContext,
+    _In_reads_bytes_opt_(Length) const VOID* Buffer,
+    _In_ ULONG Length);
+
+typedef WNF_USER_CALLBACK* PWNF_USER_CALLBACK;
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+RtlQueryWnfStateData(
+    _Out_ PWNF_CHANGE_STAMP ChangeStamp,
+    _In_ WNF_STATE_NAME StateName,
+    _In_ PWNF_USER_CALLBACK Callback,
+    _In_opt_ PVOID CallbackContext,
+    _In_opt_ PWNF_TYPE_ID TypeId);
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+RtlPublishWnfStateData(
+    _In_ WNF_STATE_NAME StateName,
+    _In_opt_ PCWNF_TYPE_ID TypeId,
+    _In_reads_bytes_opt_(Length) const VOID * Buffer,
+    _In_opt_ ULONG Length,
+    _In_opt_ const VOID * ExplicitScope);
+
+typedef struct WNF_USER_SUBSCRIPTION* PWNF_USER_SUBSCRIPTION;
+
+#define WNF_CREATE_SERIALIZATION_GROUP_FLAG 0x00000001L
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+RtlSubscribeWnfStateChangeNotification(
+    _Out_ PWNF_USER_SUBSCRIPTION * SubscriptionHandle,
+    _In_ WNF_STATE_NAME StateName,
+    _In_ WNF_CHANGE_STAMP ChangeStamp,
+    _In_ PWNF_USER_CALLBACK Callback,
+    _In_opt_ PVOID CallbackContext,
+    _In_opt_ PCWNF_TYPE_ID TypeId,
+    _In_opt_ ULONG SerializationGroup,
+    _In_ ULONG Flags);
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+RtlUnsubscribeWnfStateChangeNotification(
+    _In_ PWNF_USER_SUBSCRIPTION SubscriptionHandle);
+
+/************************************************************************************
+*
 * RTL data exports.
 *
 ************************************************************************************/
@@ -11444,13 +11959,39 @@ NTSYSAPI UNICODE_STRING RtlNtPathSeperatorString;
 *
 ************************************************************************************/
 
+#ifndef EVENT_DESCRIPTOR_DEF
+#define EVENT_DESCRIPTOR_DEF
+typedef struct _EVENT_DESCRIPTOR {
+    USHORT Id;
+    UCHAR Version;
+    UCHAR Channel;
+    UCHAR Level;
+    UCHAR Opcode;
+    USHORT Task;
+    ULONGLONG Keyword;
+} EVENT_DESCRIPTOR, * PEVENT_DESCRIPTOR;
+typedef const EVENT_DESCRIPTOR* PCEVENT_DESCRIPTOR;
+
+typedef enum _EVENT_INFO_CLASS {
+    EventProviderBinaryTrackInfo,
+    EventProviderSetReserved1,
+    EventProviderSetTraits,
+    EventProviderUseDescriptorType,
+    MaxEventInfo
+} EVENT_INFO_CLASS;
+#endif
+
+typedef struct _EVENT_FILTER_DESCRIPTOR* PEVENT_FILTER_DESCRIPTOR;
+typedef struct _EVENT_DATA_DESCRIPTOR EVENT_DATA_DESCRIPTOR, * PEVENT_DATA_DESCRIPTOR;
+typedef enum _EVENT_INFO_CLASS EVENT_INFO_CLASS;
+
 typedef VOID(NTAPI *PETWENABLECALLBACK)(
     _In_ LPCGUID SourceId,
     _In_ ULONG IsEnabled,
     _In_ UCHAR Level,
     _In_ ULONGLONG MatchAnyKeyword,
     _In_ ULONGLONG MatchAllKeyword,
-    _In_opt_ /*EVENT_FILTER_DESCRIPTOR*/ PVOID FilterData,
+    _In_opt_ PEVENT_FILTER_DESCRIPTOR FilterData,
     _Inout_opt_ PVOID CallbackContext
     );
 
@@ -11466,12 +12007,26 @@ EtwEventRegister(
 NTSYSAPI
 ULONG
 NTAPI
+EtwEventUnregister(
+    _In_ REGHANDLE RegHandle);
+
+NTSYSAPI
+ULONG
+NTAPI
 EtwEventWriteNoRegistration(
     _In_ LPCGUID ProviderId,
-    _In_ /*PCEVENT_DESCRIPTOR*/ PVOID EventDescriptor,
+    _In_ PCEVENT_DESCRIPTOR EventDescriptor,
     _In_ ULONG UserDataCount,
-    _In_reads_opt_(UserDataCount) /*PEVENT_DATA_DESCRIPTOR*/PVOID UserData);
+    _In_reads_opt_(UserDataCount) PEVENT_DATA_DESCRIPTOR UserData);
 
+NTSYSAPI
+ULONG
+NTAPI
+EtwEventSetInformation(
+    _In_ REGHANDLE RegHandle,
+    _In_ EVENT_INFO_CLASS InformationClass,
+    _In_reads_bytes_(InformationLength) PVOID EventInformation,
+    _In_ ULONG InformationLength);
 
 /*
 ** Runtime Library API END
@@ -11514,6 +12069,71 @@ NtSetSystemInformation(
     _In_ SYSTEM_INFORMATION_CLASS SystemInformationClass,
     _In_reads_bytes_opt_(SystemInformationLength) PVOID SystemInformation,
     _In_ ULONG SystemInformationLength);
+
+/************************************************************************************
+*
+* Power API.
+*
+************************************************************************************/
+
+typedef enum _SHUTDOWN_ACTION {
+    ShutdownNoReboot,
+    ShutdownReboot,
+    ShutdownPowerOff,
+    ShutdownRebootForRecovery
+} SHUTDOWN_ACTION;
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+NtShutdownSystem(
+    _In_ SHUTDOWN_ACTION Action);
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+NtPowerInformation(
+    _In_ POWER_INFORMATION_LEVEL InformationLevel,
+    _In_reads_bytes_opt_(InputBufferLength) PVOID InputBuffer,
+    _In_ ULONG InputBufferLength,
+    _Out_writes_bytes_opt_(OutputBufferLength) PVOID OutputBuffer,
+    _In_ ULONG OutputBufferLength);
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+NtInitiatePowerAction(
+    _In_ POWER_ACTION SystemAction,
+    _In_ SYSTEM_POWER_STATE LightestSystemState,
+    _In_ ULONG Flags,
+    _In_ BOOLEAN Asynchronous);
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+NtSetSystemPowerState(
+    _In_ POWER_ACTION SystemAction,
+    _In_ SYSTEM_POWER_STATE LightestSystemState,
+    _In_ ULONG Flags);
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+NtGetDevicePowerState(
+    _In_ HANDLE Device,
+    _Out_ PDEVICE_POWER_STATE State);
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+NtRequestWakeupLatency(
+    _In_ LATENCY_TIME latency);
+
+NTSYSAPI
+BOOLEAN
+NTAPI
+NtIsSystemResumeAutomatic(
+    VOID);
 
 /************************************************************************************
 *
@@ -11894,6 +12514,85 @@ NtReleaseSemaphore(
 
 /************************************************************************************
 *
+* WNF API.
+*
+************************************************************************************/
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+NtCreateWnfStateName(
+    _Out_ PWNF_STATE_NAME StateName,
+    _In_ WNF_STATE_NAME_LIFETIME NameLifetime,
+    _In_ WNF_DATA_SCOPE DataScope,
+    _In_ BOOLEAN PersistData,
+    _In_opt_ PCWNF_TYPE_ID TypeId,
+    _In_ ULONG MaximumStateSize,
+    _In_ PSECURITY_DESCRIPTOR SecurityDescriptor);
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+NtDeleteWnfStateName(
+    _In_ PCWNF_STATE_NAME StateName);
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+NtUpdateWnfStateData(
+    _In_ PCWNF_STATE_NAME StateName,
+    _In_reads_bytes_opt_(Length) const VOID* Buffer,
+    _In_opt_ ULONG Length,
+    _In_opt_ PCWNF_TYPE_ID TypeId,
+    _In_opt_ PCSID ExplicitScope,
+    _In_ WNF_CHANGE_STAMP MatchingChangeStamp,
+    _In_ LOGICAL CheckStamp);
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+NtDeleteWnfStateData(
+    _In_ PCWNF_STATE_NAME StateName,
+    _In_opt_ PCSID ExplicitScope);
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+NtQueryWnfStateData(
+    _In_ PCWNF_STATE_NAME StateName,
+    _In_opt_ PCWNF_TYPE_ID TypeId,
+    _In_opt_ PCSID ExplicitScope,
+    _Out_ PWNF_CHANGE_STAMP ChangeStamp,
+    _Out_writes_bytes_opt_(*BufferLength) PVOID Buffer,
+    _Inout_ PULONG BufferLength);
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+NtQueryWnfStateNameInformation(
+    _In_ PCWNF_STATE_NAME StateName,
+    _In_ WNF_STATE_NAME_INFORMATION NameInfoClass,
+    _In_opt_ PCSID ExplicitScope,
+    _Out_writes_bytes_(BufferLength) PVOID Buffer,
+    _In_ ULONG BufferLength);
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+NtSubscribeWnfStateChange(
+    _In_ PCWNF_STATE_NAME StateName,
+    _In_opt_ WNF_CHANGE_STAMP ChangeStamp,
+    _In_ ULONG EventMask,
+    _Out_opt_ PULONG64 SubscriptionId);
+
+NTSYSAPI
+NTSTATUS
+NTAPI
+NtUnsubscribeWnfStateChange(
+    _In_ PCWNF_STATE_NAME StateName);
+
+/************************************************************************************
+*
 * Object and Handle API.
 *
 ************************************************************************************/
@@ -11997,6 +12696,14 @@ typedef struct _OBJECT_HANDLE_FLAG_INFORMATION {
     BOOLEAN Inherit;
     BOOLEAN ProtectFromClose;
 } OBJECT_HANDLE_FLAG_INFORMATION, *POBJECT_HANDLE_FLAG_INFORMATION;
+
+typedef struct _OBJECT_SET_REF_TRACE_INFORMATION {
+    BOOLEAN Enable;
+    BOOLEAN EtwMode;
+    UCHAR Reserved[6];
+    UNICODE_STRING ProcessName;
+    UNICODE_STRING PoolTags;
+} OBJECT_SET_REF_TRACE_INFORMATION, * POBJECT_SET_REF_TRACE_INFORMATION;
 
 NTSYSAPI
 NTSTATUS
@@ -13488,9 +14195,11 @@ NtLoadKey2(
 //https://gist.github.com/tyranid/1db47869da253a912242c694e921009d#file-ntloadkeyex3-h
 
 typedef enum _KEY_LOAD_HANDLE_TYPE {
-    KeyLoadTrustKey = 1,
-    KeyLoadEvent,
-    KeyLoadToken
+    InvalidType,
+    TrustClassKey,
+    Event,
+    FileAccessToken,
+    TypeMax,
 } KEY_LOAD_HANDLE_TYPE;
 
 typedef struct _KEY_LOAD_HANDLE {
@@ -13509,7 +14218,7 @@ NtLoadKey3(
     _In_ ULONG LoadEntryCount,
     _In_opt_ ACCESS_MASK DesiredAccess,
     _Out_opt_ PHANDLE RootHandle,
-    _In_ PVOID Unused);
+    _Reserved_ PVOID Reserved);
 
 NTSYSAPI
 NTSTATUS
@@ -14978,8 +15687,7 @@ NtWaitForDebugEvent(
     _In_ HANDLE DebugObjectHandle,
     _In_ BOOLEAN Alertable,
     _In_opt_ PLARGE_INTEGER Timeout,
-    _Out_ PDBGUI_WAIT_STATE_CHANGE WaitStateChange
-);
+    _Out_ PDBGUI_WAIT_STATE_CHANGE WaitStateChange);
 
 NTSYSAPI
 NTSTATUS

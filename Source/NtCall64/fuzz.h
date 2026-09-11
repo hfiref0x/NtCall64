@@ -4,9 +4,9 @@
 *
 *  TITLE:       FUZZ.H
 *
-*  VERSION:     2.01
+*  VERSION:     2.10
 *
-*  DATE:        01 Apr 2026
+*  DATE:        09 Sep 2026
 *
 * THIS CODE AND INFORMATION IS PROVIDED "AS IS" WITHOUT WARRANTY OF
 * ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED
@@ -63,8 +63,8 @@ typedef enum _PARAM_TYPE_HINT {
 
 // Structure for known syscall parameter types
 typedef struct _SYSCALL_PARAM_INFO {
-    LPCSTR Name;                        // Name of the syscall
-    PARAM_TYPE_HINT ParamTypes[16];     // Type hints for up to 16 parameters
+    LPCSTR Name;                                // Name of the syscall
+    PARAM_TYPE_HINT ParamTypes[MAX_PARAMETERS]; // Type hints for up to MAX_PARAMETERS
 } SYSCALL_PARAM_INFO, * PSYSCALL_PARAM_INFO;
 
 typedef enum _SYSCALL_LOOKUP_RESULT {
@@ -97,14 +97,14 @@ ULONG_PTR FuzzGenerateParameter(
     _In_ PARAM_TYPE_HINT TypeHint,
     _In_ BOOL IsWin32kSyscall,
     _In_ BOOL EnableParamsHeuristic,
-    _In_ PBYTE FuzzStructBuffer);
+    _In_opt_ PBYTE FuzzStructBuffer);
 
 PARAM_TYPE_HINT FuzzDetermineParameterTypeHeuristic(
     _In_ LPCSTR SyscallName,
     _In_ ULONG ParameterIndex,
     _In_ BOOL IsWin32kSyscall);
 
-VOID FuzzTrackAllocation(
+BOOLEAN FuzzTrackAllocation(
     _In_ PVOID Address,
     _In_ FUZZ_ALLOC_TYPE Type);
 
@@ -115,15 +115,47 @@ BOOL VerifySyscallDatabaseSorted(UINT DbType);
 BOOL VerifySyscallDatabaseIntegrity(UINT DbType);
 #endif
 
-PSECURITY_DESCRIPTOR CreateFuzzedSecurityDescriptor(_In_ BYTE* FuzzStructBuffer);
-PUNICODE_STRING CreateFuzzedUnicodeString(_In_ BYTE* FuzzStructBuffer);
-POBJECT_ATTRIBUTES CreateFuzzedObjectAttributes(_In_ BYTE* FuzzStructBuffer);
-PTOKEN_PRIVILEGES CreateFuzzedTokenPrivileges(_In_ BYTE* FuzzStructBuffer);
-PIO_STATUS_BLOCK CreateFuzzedIoStatusBlock(_In_ BYTE* FuzzStructBuffer);
-PKERNEL_USER_TIMES CreateFuzzedProcessTimes(_In_ BYTE* FuzzStructBufferID);
-PLARGE_INTEGER CreateFuzzedLargeInteger(_In_ BYTE* FuzzStructBuffer);
-PCLIENT_ID CreateFuzzedClientId(_In_ BYTE* FuzzStructBuffer);
-PSECTION_IMAGE_INFORMATION CreateFuzzedSectionImageInfo(_In_ BYTE* FuzzStructBuffer);
-PVOID CreateFuzzedKeyValueParameter(VOID);
+BOOL FuzzBuildNtCreateThreadExArguments(
+    _Out_writes_(11) ULONG_PTR* Arguments,
+    _In_ PBYTE FuzzStructBuffer);
+
+PSECURITY_DESCRIPTOR CreateFuzzedSecurityDescriptor(
+    _In_ BYTE* FuzzStructBuffer,
+    _In_ SIZE_T BufferSize);
+
+PUNICODE_STRING CreateFuzzedUnicodeString(
+    _In_ BYTE* FuzzStructBuffer,
+    _In_ SIZE_T BufferSize);
+
+POBJECT_ATTRIBUTES CreateFuzzedObjectAttributes(
+    _In_ BYTE* FuzzStructBuffer,
+    _In_ SIZE_T BufferSize);
+
+PTOKEN_PRIVILEGES CreateFuzzedTokenPrivileges(
+    _In_ BYTE* FuzzStructBuffer,
+    _In_ SIZE_T BufferSize);
+
+PIO_STATUS_BLOCK CreateFuzzedIoStatusBlock(
+    _In_ BYTE* FuzzStructBuffer,
+    _In_ SIZE_T BufferSize);
+
+PKERNEL_USER_TIMES CreateFuzzedProcessTimes(
+    _In_ BYTE* FuzzStructBuffer,
+    _In_ SIZE_T BufferSize);
+
+PLARGE_INTEGER CreateFuzzedLargeInteger(
+    _In_ BYTE* FuzzStructBuffer,
+    _In_ SIZE_T BufferSize);
+
+PCLIENT_ID CreateFuzzedClientId(
+    _In_ BYTE* FuzzStructBuffer,
+    _In_ SIZE_T BufferSize);
+
+PSECTION_IMAGE_INFORMATION CreateFuzzedSectionImageInfo(
+    _In_ BYTE* FuzzStructBuffer,
+    _In_ SIZE_T BufferSize);
+
+PVOID CreateFuzzedKeyValueParameter(
+    VOID);
 
 extern __declspec(thread) BYTE g_FuzzStructBuffer[FUZZ_PARAM_BUFFER_SIZE];
