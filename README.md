@@ -125,6 +125,7 @@ You need Microsoft Visual Studio 2017 or later.
   - v141 for VS 2017
   - v142 for VS 2019
   - v143 for VS 2022
+  - v145 for VS 2026
 - Set the Target Platform Version:
   - 8.1 for v140
   - 10 for v141 and above
