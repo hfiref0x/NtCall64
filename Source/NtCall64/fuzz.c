@@ -6,7 +6,7 @@
 *
 *  VERSION:     2.10
 *
-*  DATE:        09 Sep 2026
+*  DATE:        11 Sep 2026
 *
 *  Fuzzing routines.
 *
@@ -83,7 +83,7 @@ NTSTATUS DoSystemCall(
     BOOL usedCreateThreadExProfile = FALSE;
     NTSTATUS status = STATUS_SUCCESS;
     ULONG c, paramCount;
-    PBYTE fuzzStructBuffer = NULL;
+    PBYTE fuzzStructBuffer = g_FuzzStructBuffer;
     ULONG_PTR args[MAX_PARAMETERS] = { 0 };
     PARAM_TYPE_HINT typeHints[MAX_PARAMETERS] = { 0 };
 
@@ -96,12 +96,13 @@ NTSTATUS DoSystemCall(
     }
 
     if (EnableParamsHeuristic) {
-        fuzzStructBuffer = g_FuzzStructBuffer;
         RtlSecureZeroMemory(fuzzStructBuffer, FUZZ_PARAM_BUFFER_SIZE);
-
         FuzzDetectParameterTypes(ServiceName, paramCount, isWin32kSyscall, typeHints);
     }
 
+    //
+    // Dedicated profile for NtCreateThreadEx as it affects fuzzer and may crash it.
+    //
     isCreateThread = _strcmpi_a(ServiceName, "NtCreateThreadEx") == 0;
     if (EnableParamsHeuristic &&
         ServiceName &&

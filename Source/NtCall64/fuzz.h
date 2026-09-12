@@ -6,7 +6,7 @@
 *
 *  VERSION:     2.10
 *
-*  DATE:        09 Sep 2026
+*  DATE:        11 Sep 2026
 *
 * THIS CODE AND INFORMATION IS PROVIDED "AS IS" WITHOUT WARRANTY OF
 * ANY KIND, EITHER EXPRESSED OR IMPLIED, INCLUDING BUT NOT LIMITED
@@ -16,16 +16,16 @@
 *******************************************************************************/
 #pragma once
 
-#define W32SYSCALLSTART             0x1000
-#define MAX_PARAMETERS              32
-#define MAX_STRUCT_BUFFER_SIZE      4096
-#define MAX_KEYVALUE_BUFFER_SIZE    1024
+#define W32SYSCALLSTART             4096UL
+#define MAX_PARAMETERS              32UL
+#define MAX_STRUCT_BUFFER_SIZE      4096UL
+#define MAX_KEYVALUE_BUFFER_SIZE    1024UL
 #ifdef _DEBUG
-#define FUZZ_THREAD_TIMEOUT_SEC     (60)
+#define FUZZ_THREAD_TIMEOUT_SEC     (60UL)
 #else
-#define FUZZ_THREAD_TIMEOUT_SEC     (30)
+#define FUZZ_THREAD_TIMEOUT_SEC     (30UL)
 #endif
-#define FUZZ_PASS_COUNT             (64) * (1024)
+#define FUZZ_PASS_COUNT             (64UL) * (1024UL)
 
 #define FUZZ_PARAMS_STACK_DIVISOR   4
 #define FUZZ_EXTRA_PARAMS           4
@@ -34,7 +34,7 @@
 //
 // Per-parameter storage for generated structures.
 //
-#define FUZZ_PARAM_SLOT_SIZE      1024
+#define FUZZ_PARAM_SLOT_SIZE      1024ULL
 #define FUZZ_PARAM_BUFFER_SIZE    (MAX_PARAMETERS * FUZZ_PARAM_SLOT_SIZE)
 
 // Define Windows parameter types
@@ -97,7 +97,7 @@ ULONG_PTR FuzzGenerateParameter(
     _In_ PARAM_TYPE_HINT TypeHint,
     _In_ BOOL IsWin32kSyscall,
     _In_ BOOL EnableParamsHeuristic,
-    _In_opt_ PBYTE FuzzStructBuffer);
+    _In_ PBYTE FuzzStructBuffer);
 
 PARAM_TYPE_HINT FuzzDetermineParameterTypeHeuristic(
     _In_ LPCSTR SyscallName,

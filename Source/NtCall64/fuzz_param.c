@@ -6,7 +6,7 @@
 *
 *  VERSION:     2.10
 *
-*  DATE:        09 Sep 2026
+*  DATE:        11 Sep 2026
 *
 *  Parameter type detection and structure generation for syscall fuzzing.
 *
@@ -36,7 +36,6 @@ ULONG FuzzRandom(
         x ^= GetCurrentProcessId();
         if (x == 0)
             x = 0xA5A5A5A5;
-        g_MemoryTracker.Seed = x;
     }
 
     x ^= (x << 13);
@@ -1088,7 +1087,7 @@ ULONG_PTR FuzzGenerateParameter(
     _In_ PARAM_TYPE_HINT TypeHint,
     _In_ BOOL IsWin32kSyscall,
     _In_ BOOL EnableParamsHeuristic,
-    _In_opt_ PBYTE FuzzStructBuffer
+    _In_ PBYTE FuzzStructBuffer
 )
 {
     ULONG variation;
@@ -1153,7 +1152,7 @@ ULONG_PTR FuzzGenerateParameter(
                 }
 
                 if (bufferSize > 16 && (FuzzRandom() % 5) == 0) {
-                    return (ULONG_PTR)(buffer + ((FuzzRandom() % 8) + 1));
+                    return (ULONG_PTR)(buffer + (((ULONG_PTR)FuzzRandom() % 8) + 1));
                 }
 
                 return (ULONG_PTR)buffer;
@@ -1497,7 +1496,7 @@ PSECURITY_DESCRIPTOR CreateFuzzedSecurityDescriptor(
         if (!InitializeSecurityDescriptor(pSD, SECURITY_DESCRIPTOR_REVISION))
             return NULL;
 
-        SetSecurityDescriptorDacl(pSD, TRUE, NULL, FALSE);
+        SetSecurityDescriptorDacl(pSD, TRUE, NULL, FALSE); //-V530
         SetSecurityDescriptorSacl(pSD, FALSE, NULL, FALSE);
         return pSD;
     }
@@ -1756,7 +1755,7 @@ POBJECT_ATTRIBUTES CreateFuzzedObjectAttributes(
 
     case 6:
         ObjectAttributes->Length = sizeof(OBJECT_ATTRIBUTES);
-        ObjectAttributes->ObjectName = (PUNICODE_STRING)ObjectAttributes;
+        ObjectAttributes->ObjectName = (PUNICODE_STRING)ObjectAttributes; //-V1027
         ObjectAttributes->RootDirectory = NULL;
         ObjectAttributes->Attributes = 0;
         ObjectAttributes->SecurityDescriptor = NULL;
@@ -2167,7 +2166,7 @@ PSECTION_IMAGE_INFORMATION CreateFuzzedSectionImageInfo(
         break;
 
     case 2:
-        SectionInfo->TransferAddress = (PVOID)0x400000;
+        SectionInfo->TransferAddress = (PVOID)0x400000; //-V566
         SectionInfo->ZeroBits = 0;
         SectionInfo->MaximumStackSize = 0x100000;
         SectionInfo->CommittedStackSize = 0x10000;
